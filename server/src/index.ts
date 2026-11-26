@@ -317,6 +317,15 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   for await (const c of req) { raw += c; if (raw.length > BODY_MAX) return send(413, { error: 'too large' }); }
   if (path === '/health') return send(200, { ok: true, service: 'reins', vaults: tenants.size, uptime: Math.round(process.uptime()) });
   if (req.method === 'GET' && serveSite(path, res)) return;
+  // Operator-only: move a vault's record between servers (e.g. self-hosted -> hosted). Off unless REINS_ADMIN_KEY is set.
+  if (path === '/admin/import' && req.method === 'POST') {
+    const key = process.env.REINS_ADMIN_KEY;
+    if (!key || req.headers.authorization !== `Bearer ${key}`) return send(401, { error: 'no' });
+    const t = JSON.parse(raw) as DB;
+    if (!t.vault) return send(400, { error: 'no vault' });
+    tenants.set(t.vault, t); withTenant(t, () => save()); await flush();
+    return send(200, { ok: true, vault: t.vault, agents: t.agents.length });
+  }
   if (path.startsWith('/tg/') && req.method === 'POST') { await telegramWebhook(path.slice(4), raw).catch(e => console.error('tg', e.message)); return send(200, {}); }
   for (const [m, p, scope, h] of routes) {
     const match = req.method === m && path.match(p);
