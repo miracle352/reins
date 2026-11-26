@@ -51,7 +51,7 @@ async function show(key: string, p: L.Page) {
     containerID: i + 1, containerName: `t${i}`, content: t.content || ' ', isEventCapture: !hasList && i === 0 ? 1 : 0,
   }));
   const listObject = hasList ? [new ListContainerProperty({
-    xPosition: 0, yPosition: p.listTop ?? 176, width: 576, height: 288 - (p.listTop ?? 176), borderWidth: 1, borderColor: 5, borderRadius: 8, paddingLength: 4,
+    xPosition: 0, yPosition: p.listTop ?? 176, width: 576, height: 288 - (p.listTop ?? 176), borderWidth: 0, borderColor: 0, borderRadius: 0, paddingLength: 4,
     containerID: 8, containerName: 'actions', isEventCapture: 1,
     itemContainer: new ListItemContainerProperty({ itemCount: p.items!.length, itemWidth: 0, isItemSelectBorderEn: 1, itemName: p.items }),
   })] : undefined;
@@ -216,6 +216,7 @@ async function onSelect(index: number) {
       return void listenFor(n ? `Try "give ${n} 1 more", "pause ${n}"\nor "how much today"` : 'Try "how much today".\nWith an agent: "give <name> 1 more", "pause <name>".');
     }
     case 'activity': view = { t: 'activity' }; return render();
+    case 'why': if (c) { view = { t: 'why', cardId: c.id }; return render(); } return;
     case 'give': if (view.t === 'agent') { view = { t: 'confirmGive', agentId: view.id, amount: 0.5 }; return render(); } return;
     case 'pause': case 'resume': if (view.t === 'agent') { const id = view.id; return run(() => pause(id, action === 'pause')); } return;
     default:
@@ -338,6 +339,7 @@ bridge.onEvenHubEvent(event => {
   const lst = event.listEvent ? (event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT) : null;
   // Double-tap always exits: Even's rule, so the user can always leave.
   if (sys === OsEventTypeList.DOUBLE_CLICK_EVENT || lst === OsEventTypeList.DOUBLE_CLICK_EVENT) { void bridge.shutDownPageContainer(1); return; }
+  if (galleryMode) { if (sys === OsEventTypeList.CLICK_EVENT || lst === OsEventTypeList.CLICK_EVENT) void galleryNext(); return; }
   if (lst === OsEventTypeList.CLICK_EVENT) { if (mic) finish(); void onSelect(event.listEvent!.currentSelectItemIndex ?? 0); return; }
   if (sys === OsEventTypeList.CLICK_EVENT) { if (mic) { finish(); return; } overlay = null; void poll(); return; }
   if (sys === OsEventTypeList.FOREGROUND_ENTER_EVENT) void poll();
@@ -351,8 +353,21 @@ mountPhone({
   async create() { vault = await createVault(store); await hello(); return vault; },
   async import(words) { vault = await importVault(store, words); await hello(); return vault; },
 });
+// Dev gallery: /?gallery shows every screen with sample data; a tap moves to the next.
+const galleryMode = import.meta.env.DEV && new URLSearchParams(location.search).has('gallery');
+let galleryAt = 0;
+async function galleryNext(step = 1) {
+  const { gallery } = await import('./fixtures.ts');
+  galleryAt = (galleryAt + step + gallery.length) % gallery.length;
+  const [name, page] = gallery[galleryAt];
+  console.log('gallery', name);
+  await show('gallery:' + name, page);
+}
 async function hello() { if (vault) { token = ''; await api('POST', '/lens/hello').catch(e => console.warn('hello', e.message)); await poll(); } }
-await render();
-setTimeout(() => void render(), 1900); // leave the splash
-await hello();
-setInterval(poll, 3000);
+if (galleryMode) await galleryNext(0);
+else {
+  await render();
+  setTimeout(() => void render(), 1900); // leave the splash
+  await hello();
+  setInterval(poll, 3000);
+}

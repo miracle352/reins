@@ -1,5 +1,5 @@
 // The lens: 576x288, 16 shades of green. One decision per screen, the number big, the safe choice first.
-import { bigText, fingerprint } from './art.ts';
+import * as A from './art.ts';
 
 export type Flag = { code: string; text: string };
 export type Card = {
@@ -20,7 +20,7 @@ export type State = {
 
 export type Action =
   | 'approve' | 'trust' | 'reject' | 'kill' | 'back' | 'voice' | 'activity' | 'give' | 'pause' | 'resume'
-  | 'dismiss' | 'cancel' | 'yesKill' | 'yesGive' | `agent:${string}`;
+  | 'dismiss' | 'cancel' | 'yesKill' | 'yesGive' | 'why' | `agent:${string}`;
 export type Txt = { x: number; y: number; w: number; h: number; content: string };
 export type Img = { x: number; y: number; w: number; h: number; key: string; draw: () => Promise<Uint8Array> };
 export type Page = { texts: Txt[]; images?: Img[]; items?: string[]; actions?: Action[]; listTop?: number };
@@ -39,89 +39,89 @@ export function bar(spent: string, total: string, n = 10) {
 }
 
 const full = (content: string, h = 288): Txt => ({ x: 0, y: 0, w: 576, h, content });
-const bigAmount = (amount: string, sub?: string): Img => ({ x: 0, y: 34, w: 288, h: 64, key: `amt:${amount}:${sub}`, draw: () => bigText(`${amount} GRAM`, 288, 64, { sub }) });
-const glyph = (address: string, x: number): Img => ({ x, y: 4, w: 72, h: 72, key: `fp:${address}`, draw: () => fingerprint(address, 72) });
+// Layout: two 288x144 tiles across the top carry the meaning; the native list below carries the choices.
+const LIST = 150;
+const left = (key: string, draw: () => Promise<Uint8Array>): Img => ({ x: 0, y: 0, w: A.W, h: A.H, key, draw });
+const right = (key: string, draw: () => Promise<Uint8Array>): Img => ({ x: 288, y: 0, w: A.W, h: A.H, key, draw });
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const sentences = (flags: Flag[]) => [...flags].sort((a, b) => +STOPS.includes(b.code) - +STOPS.includes(a.code)).slice(0, 2).map(f => cap(f.text) + '.').join(' ');
 
 // ---------- home ----------
 export function home(s: State): Page {
   const agents = live(s);
   const working = agents.filter(a => a.status === 'active').length;
-  const head = [
-    `${working ? '●' : '○'} ${working} agent${working === 1 ? '' : 's'} working   ·   ${s.atRisk} GRAM at risk`,
-    `Today ${s.spentToday} spent   ·   vault ${s.vaultBalance}`,
-  ].join('\n');
+  const paused = agents.length - working;
+  const word = !agents.length ? 'NO AGENTS' : paused ? `${paused} PAUSED` : 'ALL CLEAR';
+  const sub = !agents.length ? 'Connect one from your phone' : `${working} working · ${s.atRisk} GRAM out`;
+  const budget = agents.reduce((t, a) => t + num(a.daily), 0);
   const items: string[] = [], actions: Action[] = [];
   for (const a of agents) {
-    items.push(a.status === 'frozen'
-      ? `○ ${a.name}   paused   ${a.spentToday}/${a.daily}`
-      : `● ${a.name}   ${bar(a.spentToday, a.daily)}   ${a.spentToday}/${a.daily}`);
+    items.push(`${a.status === 'frozen' ? '○' : '●'} ${a.name}   ${a.status === 'frozen' ? 'paused' : `${a.spentToday} of ${a.daily} today`}`);
     actions.push(`agent:${a.id}`);
   }
-  items.push('≈ Speak a command', '… Activity'); actions.push('voice', 'activity');
-  return { texts: [full(head, 70)], items, actions, listTop: 72 };
+  items.push('≈ Speak a command', '… What happened today'); actions.push('voice', 'activity');
+  return {
+    texts: [],
+    images: [left(`home:${word}:${sub}`, () => A.statusTile(word, sub)),
+             right(`gauge:${s.spentToday}:${budget}:${s.vaultBalance}`, () => A.gaugeTile(num(s.spentToday), budget, 'Spent today', `Vault ${s.vaultBalance} GRAM`))],
+    items, actions, listTop: LIST,
+  };
 }
 
 // ---------- one agent ----------
 export function agentPage(a: AgentRow): Page {
   const paused = a.status === 'frozen';
-  const body = [
-    `Wallet ${a.balance} GRAM`,
-    `Today ${bar(a.spentToday, a.daily, 12)} ${a.spentToday} of ${a.daily}`,
-    a.last ? `Last ${a.last.amount} → ${a.last.to}, ${ago(a.last.at)}` : 'No payments yet',
-  ].join('\n');
+  const status = paused ? 'PAUSED' : `${a.balance} GRAM in its wallet${a.waiting ? ` · ${a.waiting} waiting` : ''}`;
+  const foot = a.last ? `Last ${a.last.amount} → ${a.last.to}, ${ago(a.last.at)}` : 'No payments yet';
   return {
-    texts: [{ x: 0, y: 0, w: 420, h: 36, content: `${paused ? '○' : '●'} ${a.name} · ${paused ? 'PAUSED' : 'working'}${a.waiting ? ` · ${a.waiting} waiting` : ''}` },
-            { x: 0, y: 38, w: 496, h: 110, content: body }],
-    images: [glyph(a.address, 500)],
+    texts: [],
+    images: [left(`agent:${a.name}:${status}`, () => A.agentTile(a.name, status, a.address)),
+             right(`agauge:${a.spentToday}:${a.daily}:${foot}`, () => A.gaugeTile(num(a.spentToday), num(a.daily), 'Today', foot))],
     items: ['← Back', '≈ Speak a command', '+ Give 0.5 more today', paused ? '▶ Resume' : '○ Pause', `■ Kill ${a.name}`],
     actions: ['back', 'voice', 'give', paused ? 'resume' : 'pause', 'kill'],
-    listTop: 150,
+    listTop: LIST,
   };
 }
 
 // ---------- a request ----------
 export const isClean = (c: Card) => c.flags.length === 0;
+const STOPS = ['LOOKALIKE', 'MISMATCH', 'BAD_ADDRESS', 'NAME_TAKEN'];
 
 export function card(c: Card, waiting: number): Page {
-  const more = waiting > 1 ? ` · ${waiting - 1} more waiting` : '';
+  const more = waiting > 1 ? ` · ${waiting - 1} more` : '';
   if (c.kind === 'create') {
     const clash = c.flags.length > 0;
+    const reason = clash ? `${cap(c.flags[0].text)}. Same name, different key.` : 'Anything beyond its rules comes back to you here.';
+    const verdict: A.Verdict = clash ? 'STOP' : 'NEW AGENT';
     return {
-      texts: [{ x: 0, y: 0, w: 496, h: 34, content: `${c.agent} wants a wallet${more}   ${clash ? '≈ say "why"' : '≈ say "approve"'}` },
-              { x: 0, y: 100, w: 576, h: 62, content: clash
-                ? `! ${c.flags[0].text}. Same name, different key:\na lost key file, or something posing as it.`
-                : 'Its starting buffer. Anything beyond its rules\ncomes back to you here.' },
-              { x: 470, y: 72, w: 106, h: 34, content: 'its wallet' }],
-      images: [bigAmount(c.amount), glyph(c.agentAddress, 500)],
+      texts: [],
+      images: [left(`camt:${c.agent}:${c.amount}${more}`, () => A.amountTile(`${c.agent} wants a wallet${more}`, c.amount, 'GRAM', 'its starting buffer')),
+               right(`cv:${verdict}:${c.agentAddress}`, () => A.verdictTile(verdict, reason, [{ address: c.agentAddress, tag: 'its wallet' }]))],
       ...(clash
         ? { items: ['× Reject', `▶ Create anyway  ${c.amount}`], actions: ['reject', 'approve'] as Action[] }
         : { items: [`▶ Create wallet  ${c.amount}`, '× Reject'], actions: ['approve', 'reject'] as Action[] }),
-      listTop: 166,
+      listTop: LIST,
     };
   }
   const who = c.toName ?? short(c.to!);
   const clean = isClean(c);
   const twin = c.flags.some(f => f.code === 'LOOKALIKE') ? c.twin : undefined;
-  const images: Img[] = [bigAmount(c.amount)];
-  let label: string;
-  if (twin) { images.push(glyph(c.to!, 420), glyph(twin.address, 500)); label = ' this  ≠  known'; }
-  else { images.push(glyph(c.to!, 500)); label = c.toName ? ' known' : ' new'; }
-  const lines = [`→ ${who}   "${fit(c.purpose, 36)}"`];
-  if (clean) lines.push('● known payee · matches what it said');
-  else lines.push(c.flags.slice(0, 2).map(f => `! ${f.text}`).join('   '));
-  const hint = clean ? '≈ say "approve"' : more ? '≈ say "why"' : '≈ tap to approve · say "why"';
-  const texts: Txt[] = [{ x: 0, y: 0, w: 416, h: 34, content: `${c.agent} asks${more}   ${hint}` },
-                        { x: 0, y: 100, w: 576, h: 62, content: lines.join('\n') },
-                        { x: twin ? 418 : 470, y: 72, w: twin ? 158 : 106, h: 34, content: label }];
+  const verdict: A.Verdict = clean ? 'SAFE' : c.flags.some(f => STOPS.includes(f.code)) ? 'STOP' : 'CHECK';
+  const reason = clean ? 'Known payee. The amount matches what it said.' : sentences(c.flags);
+  const prints = twin ? [{ address: c.to!, tag: 'asked' }, { address: twin.address, tag: twin.name }]
+                      : [{ address: c.to!, tag: c.toName ? 'known' : 'new' }];
+  const kicker = `${c.agent} asks${more} · say "${clean ? 'approve' : 'why'}"`;
+  const images = [left(`pamt:${kicker}:${c.amount}:${who}`, () => A.amountTile(kicker, c.amount, 'GRAM', `→ ${who}`)),
+                  right(`pv:${verdict}:${reason}:${c.to}:${twin?.address}`, () => A.verdictTile(verdict, reason, prints))];
   if (clean) {
     // Smart default: a clean request to a known payee is one tap away.
-    return { texts, images, items: [`▶ Approve ${c.amount}`, '× Reject', '★ Approve & always trust', `■ Kill ${c.agent}`], actions: ['approve', 'reject', 'trust', 'kill'], listTop: 166 };
+    return { texts: [], images, items: [`▶ Approve ${c.amount}`, '× Reject', '★ Approve & always trust', `■ Kill ${c.agent}`], actions: ['approve', 'reject', 'trust', 'kill'], listTop: LIST };
   }
   // Flagged: Reject is item 0. The SDK drops zero values, so an ambiguous tap lands on Reject.
-  const items = ['× Reject', `▶ Fund once  ${c.amount}`]; const actions: Action[] = ['reject', 'approve'];
-  if (!c.flags.some(f => f.code === 'LOOKALIKE' || f.code === 'MISMATCH')) { items.push('★ Fund & trust payee'); actions.push('trust'); }
+  const items = ['× Reject', `▶ Pay once anyway  ${c.amount}`, '? Why']; const actions: Action[] = ['reject', 'approve', 'why'];
+  if (!c.flags.some(f => STOPS.includes(f.code))) { items.push('★ Pay & trust payee'); actions.push('trust'); }
   items.push(`■ Kill ${c.agent}`); actions.push('kill');
-  return { texts, images, items, actions, listTop: 166 };
+  return { texts: [], images, items, actions, listTop: LIST };
 }
 
 const WHY: Record<string, string> = {
@@ -142,47 +142,45 @@ export function why(c: Card): Page {
 
 // ---------- alarm, confirms, activity, notes ----------
 export function alarm(a: NonNullable<State['alarm']>, atRisk: string): Page {
-  const head: Txt = { x: 0, y: 0, w: 496, h: 34, content: `■ ALARM · ${a.agent}   ≈ say "kill it"` };
   const items = [`■ Kill ${a.agent} now`, '× Dismiss'];
   const actions: Action[] = ['kill', 'dismiss'];
-  if (a.amount && a.to) {
-    return {
-      texts: [head, { x: 0, y: 100, w: 576, h: 62, content: `→ ${short(a.to)}   ·   still at risk ${atRisk} GRAM\nKill revokes its key and pulls the rest back.` }],
-      images: [{ x: 0, y: 34, w: 288, h: 64, key: `alarm:${a.amount}`, draw: () => bigText(`${a.amount} GRAM`, 288, 64, { sub: 'left with no approval' }) }, glyph(a.to, 500)],
-      items, actions, listTop: 166,
-    };
-  }
-  return { texts: [head, { x: 0, y: 40, w: 576, h: 122, content: `${a.text}\n\nStill at risk: ${atRisk} GRAM` }], items, actions, listTop: 166 };
+  const kicker = `${a.agent} · say "kill it"`;
+  const reason = a.amount ? `Left with no approval. ${atRisk} GRAM still at risk.` : `${a.text} ${atRisk} GRAM at risk.`;
+  return {
+    texts: [],
+    images: [left(`alamt:${kicker}:${a.amount}:${a.to}`, () => a.amount && a.to ? A.amountTile(kicker, a.amount, 'GRAM', `→ ${short(a.to)}`) : A.statusTile('PAUSED', a.agent)),
+             right(`alv:${reason}:${a.to}`, () => A.verdictTile('ALARM', reason, a.to ? [{ address: a.to, tag: 'went to' }] : []))],
+    items, actions, listTop: LIST,
+  };
 }
 
 export const confirmKill = (agent: string, balance: string): Page => ({
-  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Kill ${agent}?   ≈ say "yes" or "no"` },
-          { x: 0, y: 100, w: 576, h: 62, content: 'Its key is revoked on chain.\nIt can never spend again.' }],
-  images: [{ x: 0, y: 34, w: 288, h: 64, key: `kill:${balance}`, draw: () => bigText(`${balance} GRAM`, 288, 64, { sub: 'comes back to your vault' }) }],
-  items: ['× Cancel', '■ Yes, kill it'], actions: ['cancel', 'yesKill'], listTop: 166,
+  texts: [],
+  images: [left(`kamt:${agent}:${balance}`, () => A.amountTile(`kill ${agent}? · say yes or no`, balance, 'GRAM', 'comes back to your vault')),
+           right('kill?', () => A.headlineTile('KILL?', 'Its key is revoked on chain.\nIt can never spend again.'))],
+  items: ['× Cancel', '■ Yes, kill it'], actions: ['cancel', 'yesKill'], listTop: LIST,
 });
-export const confirmGive = (a: AgentRow, amount: number): Page => ({
-  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Give ${a.name}   ≈ say "yes" or "no"` },
-          { x: 0, y: 100, w: 576, h: 62, content: `From your vault to its wallet, now.\nToday's budget becomes ${+(num(a.daily) + amount).toFixed(3)} GRAM.` }],
-  images: [bigAmount(String(amount))],
-  items: ['× Cancel', `▶ Yes, send ${amount}`], actions: ['cancel', 'yesGive'], listTop: 166,
-});
+export const confirmGive = (a: AgentRow, amount: number): Page => {
+  const after = +(num(a.daily) + amount).toFixed(3);
+  return {
+    texts: [],
+    images: [left(`gamt:${a.name}:${amount}`, () => A.amountTile(`give ${a.name} · say yes or no`, String(amount), 'GRAM', 'from your vault, now')),
+             right(`give?:${after}`, () => A.headlineTile('GIVE?', `Today's budget becomes\n${after} GRAM`))],
+    items: ['× Cancel', `▶ Yes, send ${amount}`], actions: ['cancel', 'yesGive'], listTop: LIST,
+  };
+};
 export const activity = (s: State): Page => ({
-  texts: [full(s.ticker.map(t => `· ${fit(t, 62)}`).join('\n') || 'Nothing yet.', 234)],
+  texts: [full(s.ticker.map(t => `· ${fit(t, 62)}`).join('\n') || 'Nothing yet today.', 234)],
   items: ['← Back'], actions: ['back'], listTop: 236,
 });
 
-/** The firmware cannot center text, so estimate the width (~8.7 px per character in the G2 font) and offset the box. */
-const centered = (content: string, y: number, h: number): Txt => {
-  const longest = Math.max(...content.split('\n').map(l => l.length));
-  const w = Math.min(576, Math.ceil(longest * 8.7) + 12);
-  return { x: Math.max(0, Math.floor((576 - w) / 2)), y, w: 576 - Math.max(0, Math.floor((576 - w) / 2)), h, content };
-};
+// A transparent strip that takes input on screens without a list (double-tap to exit still works).
+const catcher: Txt = { x: 0, y: 238, w: 576, h: 50, content: ' ' };
 
-/** A result: big headline, one line of detail. */
+/** A result: one word, one line. Kill and alarm results are solid. */
 export const result = (headline: string, detail: string): Page => ({
-  texts: [centered(detail, 150, 120)],
-  images: [{ x: 144, y: 40, w: 288, h: 96, key: `res:${headline}`, draw: () => bigText(headline, 288, 96, { align: 'center' }) }],
+  texts: [catcher],
+  images: [{ x: 144, y: 60, w: A.W, h: A.H, key: `res:${headline}:${detail}`, draw: () => A.headlineTile(headline, detail, headline === 'KILLED') }],
 });
 export const note = (text: string): Page => ({ texts: [full(text)] });
 export const listening = (hint: string, level: number): Page => ({
@@ -190,7 +188,7 @@ export const listening = (hint: string, level: number): Page => ({
           { x: 0, y: 44, w: 576, h: 40, content: bar(String(level), '1', 20) },
           { x: 0, y: 100, w: 576, h: 180, content: hint }],
 });
-export const splashPage = (tagline: string): Page => ({
-  texts: [centered(tagline, 170, 40)],
-  images: [{ x: 144, y: 60, w: 288, h: 96, key: 'splash', draw: () => bigText('REINS', 288, 96, { align: 'center' }) }],
+export const splashPage = (_tagline: string): Page => ({
+  texts: [catcher],
+  images: [{ x: 144, y: 72, w: A.W, h: A.H, key: 'wordmark', draw: () => A.wordmark() }],
 });
