@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reins: your agents spend, you hold the reins</title>
+<meta name="description" content="Give AI agents their own TON wallets and approve what they spend from your Even G2 glasses. Catches poisoned addresses, injected amounts and hijacked keys.">
+<meta property="og:title" content="Reins: your agents spend, you hold the reins">
+<meta property="og:description" content="AI agents get small TON wallets. Everything beyond their rules waits for a glance at your Even G2 glasses.">
+<meta property="og:image" content="/img/lens-lookalike.png">
+<meta name="theme-color" content="#1e2329">
+<style>
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 700; src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 800; src: url(/fonts/barlow-condensed-latin-800-normal.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Barlow'; font-weight: 400; src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Barlow'; font-weight: 500; src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Barlow'; font-weight: 600; src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2'); font-display: swap; }
+:root { --slate:#1e2329; --raised:#272d35; --rule:#353c46; --bone:#ece6d9; --dust:#9aa0a8; --leather:#c8925a; --leather-hi:#e3b27c; --alarm:#ff6a4d; --lens:#8bf0a0;
+  --cond:'Barlow Condensed','Arial Narrow',sans-serif; --body:'Barlow',system-ui,sans-serif; }
+* { box-sizing: border-box; }
+html { background: var(--slate); color: var(--bone); font: 18px/1.55 var(--body); -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+a { color: var(--leather-hi); }
+:focus-visible { outline: 2px solid var(--leather-hi); outline-offset: 3px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+h1, h2, h3 { font-family: var(--cond); margin: 0; line-height: 1.02; }
+p { margin: 0; }
+
+nav { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; }
+.mark { font: 800 28px/1 var(--cond); letter-spacing: 4px; color: var(--bone); text-decoration: none; }
+nav a.gh { color: var(--dust); text-decoration: none; font-weight: 500; }
+
+/* hero: the rein, drawn from the headline to the lens */
+.hero { display: grid; grid-template-columns: 1fr 1.05fr; gap: 48px; align-items: center; padding: 40px 0 90px; position: relative; }
+.hero h1 { font-size: clamp(54px, 8vw, 104px); font-weight: 800; letter-spacing: -.5px; }
+.hero h1 span { display: block; color: var(--dust); }
+.hero h1 i { font-style: normal; }
+.hero p.lead { font-size: 21px; margin: 26px 0 32px; max-width: 30ch; }
+.btn { display: inline-flex; align-items: center; font: 600 17px/1 var(--body); padding: 15px 22px; border-radius: 999px; text-decoration: none; border: 1px solid var(--rule); color: var(--bone); margin: 0 10px 10px 0; }
+.btn.go { background: var(--leather); border-color: var(--leather); color: #1b1410; }
+.lens { position: relative; border-radius: 22px; background: #000; padding: 18px; box-shadow: 0 0 0 1px #2e343c, 0 30px 80px -30px #000; }
+.lens img { display: block; width: 100%; height: auto; image-rendering: auto; }
+.lens figcaption { color: var(--dust); font-size: 15px; margin-top: 12px; }
+#rein { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+#rein path { fill: none; stroke: var(--leather); stroke-width: 2.5; stroke-linecap: round; }
+
+section { padding: 84px 0; border-top: 1px solid var(--rule); }
+h2 { font-size: clamp(38px, 5vw, 58px); font-weight: 800; max-width: 18ch; }
+.intro { font-size: 20px; color: var(--dust); max-width: 52ch; margin-top: 18px; }
+
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 48px; padding: 0; list-style: none; counter-reset: s; }
+.steps li { counter-increment: s; }
+.steps li::before { content: counter(s); display: block; font: 800 56px/1 var(--cond); color: var(--leather); margin-bottom: 10px; }
+.steps h3 { font-size: 28px; margin-bottom: 8px; }
+.steps p { color: var(--dust); }
+
+.catches { display: grid; grid-template-columns: 1fr 1fr; gap: 56px 44px; margin-top: 54px; }
+.catch .lens { padding: 12px; border-radius: 16px; }
+.catch h3 { font-size: 30px; margin: 22px 0 8px; }
+.catch p { color: var(--dust); max-width: 44ch; }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; margin-top: 44px; }
+pre { background: var(--raised); border-radius: 14px; padding: 18px 20px; font: 14px/1.6 ui-monospace, Menlo, monospace; overflow-x: auto; margin: 0; color: var(--bone); }
+.phone { width: 100%; max-width: 360px; border-radius: 28px; border: 8px solid #0f1215; display: block; }
+.facts { margin: 22px 0 0; padding: 0; list-style: none; }
+.facts li { padding: 14px 0; border-top: 1px solid var(--rule); }
+.facts b { font-weight: 600; }
+
+footer { padding: 50px 0 70px; color: var(--dust); border-top: 1px solid var(--rule); font-size: 16px; }
+
+@media (max-width: 820px) {
+  .hero, .split, .catches { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; }
+  #rein { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a class="mark" href="/">REINS</a><a class="gh" href="https://github.com/miracle352/reins">Source on GitHub</a></nav>
+
+  <header class="hero">
+    <div>
+      <h1>Your agents spend. <span>You hold the <i class="r">reins.</i></span></h1>
+      <p class="lead">AI agents get small TON wallets of their own. Anything beyond their rules waits for one look at your Even G2 glasses.</p>
+      <a class="btn go" href="#start">Set it up</a><a class="btn" href="#catches">What it stops</a>
+    </div>
+    <figure class="lens" style="margin:0">
+      <img src="/img/lens-lookalike.png" width="576" height="288" alt="Glasses screen: trip-bot asks 0.05 GRAM. Verdict STOP: looks like Weather API, never paid before. Two address prints side by side, marked as not equal.">
+      <figcaption>A poisoned address, stopped on the glasses. The prints under STOP are drawn from each address's hash, so a lookalike can copy the letters but not the pattern.</figcaption>
+    </figure>
+    <svg id="rein" aria-hidden="true"><path id="reinpath"/></svg>
+  </header>
+</div>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Three steps, then you mostly just glance.</h2>
+    <ol class="steps">
+      <li><h3>Create a vault</h3><p>Open Reins in the Even app. It makes a TON wallet whose key never leaves your phone, and you top it up from any TON wallet.</p></li>
+      <li><h3>Connect an agent</h3><p>Give Claude Code, Hermes, Codex or your own agent a one-time code. It asks your glasses for a wallet and gets a small starting buffer.</p></li>
+      <li><h3>Let it work</h3><p>Trusted payees under their limit go through on their own. Anything new, odd or over budget shows up on the lens with a one-word verdict.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="catches">
+  <div class="wrap">
+    <h2>Built for the ways agents actually get fooled.</h2>
+    <p class="intro">We ran real models against it. They paid addresses planted in documents and followed instructions hidden in invoices. Each of these was caught on TON testnet.</p>
+    <div class="catches">
+      <div class="catch"><div class="lens"><img src="/img/lens-lookalike.png" width="576" height="288" alt="STOP: looks like Weather API"></div>
+        <h3>Address poisoning</h3><p>The address copies the first and last letters of a payee you trust. Reins compares it with your payees and shows both prints.</p></div>
+      <div class="catch"><div class="lens"><img src="/img/lens-mismatch.png" width="576" height="288" alt="STOP: said 0.4, asks 2"></div>
+        <h3>Injected amounts</h3><p>The agent wrote "0.4" in its reason and asked for 2. Reins reads the amount in the reason and compares, in code, not with another model.</p></div>
+      <div class="catch"><div class="lens"><img src="/img/lens-alarm.png" width="576" height="288" alt="ALARM: 0.25 GRAM left with no approval"></div>
+        <h3>A stolen agent key</h3><p>If someone signs with the agent's key directly, the watchdog sees money leave without an approval. Kill revokes the key on chain and sweeps the rest back.</p></div>
+      <div class="catch"><div class="lens"><img src="/img/lens-impostor.png" width="576" height="288" alt="STOP: trip-bot already has a wallet"></div>
+        <h3>An agent that isn't yours</h3><p>A new key asking for a wallet under the name of an agent you already run is flagged before it gets anything.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Any agent that speaks MCP.</h2>
+    <div class="split">
+      <div>
+        <p class="intro" style="margin-top:0">The agent gets three tools: connect, wallet and pay. It never sees a key that can touch your vault, and every call it makes is signed with its own.</p>
+        <pre style="margin-top:26px">claude mcp add reins \
+  -e REINS_LINK=YOUR-CODE \
+  -- npx tsx reins/kit/src/mcp.ts</pre>
+        <ul class="facts">
+          <li><b>Real wallets.</b> Agents use TON's agentic wallet contract. Revoking one is a transaction, not a database flag.</li>
+          <li><b>Your key stays home.</b> The vault key lives on your phone. The Reins server relays requests and watches the chain; it cannot move your money.</li>
+          <li><b>Telegram, too.</b> Warnings arrive in Telegram with Reject and Pause buttons. Approving still takes your glasses.</li>
+          <li><b>Voice.</b> Say "approve", "why" or "give trip-bot one more". Flagged requests can't be approved by voice.</li>
+        </ul>
+      </div>
+      <img class="phone" src="/img/phone.png" width="600" height="800" alt="Phone page: your vault at the top with a rein running to each agent, and today's spending under each.">
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Reins runs on TON testnet while it's young. Open source, built for the Even Realities "Heads Up" hackathon. <a href="https://github.com/miracle352/reins">github.com/miracle352/reins</a>
+  </div>
+</footer>
+
+<script>
+// One rein, drawn once on load: from the headline to the lens, like the line in the logo.
+(() => {
+  const hero = document.querySelector('.hero'), path = document.getElementById('reinpath');
+  const h1 = hero.querySelector('h1'), lens = hero.querySelector('.lens');
+  if (!path || matchMedia('(max-width: 820px)').matches) return;
+  const place = () => {
+    const hb = hero.getBoundingClientRect(), a = h1.querySelector('.r').getBoundingClientRect(), b = lens.getBoundingClientRect();
+    const x1 = a.right - hb.left + 6, y1 = a.top - hb.top + a.height * 0.62;
+    const x2 = b.left - hb.left, y2 = b.top - hb.top + b.height * 0.5;
+    // held at the word, slack in the middle, taut at the lens
+    path.setAttribute('d', `M ${x1} ${y1} C ${x1 + 40} ${y1 + 60}, ${x2 - 70} ${y2 + 50}, ${x2} ${y2}`);
+  };
+  document.fonts.ready.then(() => {
+    place(); addEventListener('resize', place);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = len; path.style.strokeDashoffset = len;
+    path.getBoundingClientRect();
+    path.style.transition = 'stroke-dashoffset 1.4s cubic-bezier(.3,.7,.2,1) .2s';
+    path.style.strokeDashoffset = 0;
+    path.addEventListener('transitionend', () => { path.style.strokeDasharray = ''; path.style.transition = ''; }, { once: true });
+  });
+})();
+</script>
+</body>
+</html>

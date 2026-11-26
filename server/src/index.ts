@@ -1,5 +1,7 @@
 // Reins server: relays between agents (kit) and the glasses (lens), applies the rules, watches the chain.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, extname } from 'node:path';
 import { Address } from '@ton/core';
 import { agentAddress, fmt, fmtUser, isLookalike } from '../../shared/ton.ts';
 import * as chain from './chain.ts';
@@ -312,7 +314,8 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const path = (req.url ?? '/').split('?')[0];
   let raw = '';
   for await (const c of req) { raw += c; if (raw.length > BODY_MAX) return send(413, { error: 'too large' }); }
-  if (path === '/health' || path === '/') return send(200, { ok: true, service: 'reins', vaults: tenants.size, uptime: Math.round(process.uptime()) });
+  if (path === '/health') return send(200, { ok: true, service: 'reins', vaults: tenants.size, uptime: Math.round(process.uptime()) });
+  if (req.method === 'GET' && serveSite(path, res)) return;
   if (path.startsWith('/tg/') && req.method === 'POST') { await telegramWebhook(path.slice(4), raw).catch(e => console.error('tg', e.message)); return send(200, {}); }
   for (const [m, p, scope, h] of routes) {
     const match = req.method === m && path.match(p);
@@ -326,6 +329,18 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   }
   send(404, { error: 'not found' });
 }).listen(PORT, () => console.log(`reins server on :${PORT}`));
+
+// The landing page (site/) is served from the same place as the API.
+const SITE = new URL('../../site/', import.meta.url).pathname;
+const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.css': 'text/css' };
+function serveSite(path: string, res: ServerResponse) {
+  const rel = path === '/' ? 'index.html' : path.slice(1);
+  if (rel.includes('..') || !/^[\w./-]+$/.test(rel)) return false;
+  const file = join(SITE, rel), type = TYPES[extname(file)];
+  if (!type || !existsSync(file)) return false;
+  res.writeHead(200, { 'content-type': type, 'cache-control': rel === 'index.html' ? 'no-cache' : 'public, max-age=86400' });
+  res.end(readFileSync(file)); return true;
+}
 
 function authorize(scope: Scope, req: IncomingMessage, path: string, raw: string, body: any): DB | undefined {
   if (scope === 'open') return;
