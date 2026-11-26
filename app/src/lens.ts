@@ -86,11 +86,11 @@ export function card(c: Card, waiting: number): Page {
   const more = waiting > 1 ? ` · ${waiting - 1} more waiting` : '';
   if (c.kind === 'create') {
     return {
-      texts: [{ x: 0, y: 0, w: 420, h: 34, content: `${c.agent} wants a wallet${more}` },
-              { x: 0, y: 98, w: 576, h: 84, content: 'Its starting buffer. Anything beyond its rules\ncomes back to you here.\n≈ say "approve" or "reject"' },
+      texts: [{ x: 0, y: 0, w: 496, h: 34, content: `${c.agent} wants a wallet${more}   ≈ say "approve"` },
+              { x: 0, y: 100, w: 576, h: 62, content: 'Its starting buffer. Anything beyond its rules\ncomes back to you here.' },
               { x: 470, y: 72, w: 106, h: 34, content: 'its wallet' }],
       images: [bigAmount(c.amount), glyph(c.agentAddress, 500)],
-      items: [`▶ Create wallet  ${c.amount}`, '× Reject'], actions: ['approve', 'reject'], listTop: 182,
+      items: [`▶ Create wallet  ${c.amount}`, '× Reject'], actions: ['approve', 'reject'], listTop: 166,
     };
   }
   const who = c.toName ?? short(c.to!);
@@ -135,29 +135,30 @@ export function why(c: Card): Page {
 
 // ---------- alarm, confirms, activity, notes ----------
 export function alarm(a: NonNullable<State['alarm']>, atRisk: string): Page {
-  const images: Img[] = [];
-  const texts: Txt[] = [{ x: 0, y: 0, w: 416, h: 34, content: `■ ALARM · ${a.agent}` }];
+  const head: Txt = { x: 0, y: 0, w: 496, h: 34, content: `■ ALARM · ${a.agent}   ≈ say "kill it"` };
+  const items = [`■ Kill ${a.agent} now`, '× Dismiss'];
+  const actions: Action[] = ['kill', 'dismiss'];
   if (a.amount && a.to) {
-    images.push({ x: 0, y: 34, w: 288, h: 64, key: `alarm:${a.amount}`, draw: () => bigText(`${a.amount} GRAM`, 288, 64, { sub: 'left with no approval' }) }, glyph(a.to, 500));
-    texts.push({ x: 470, y: 72, w: 106, h: 34, content: short(a.to) },
-               { x: 0, y: 98, w: 576, h: 84, content: `Still at risk: ${atRisk} GRAM\nKill revokes its key and pulls the rest back.\n≈ say "kill it"` });
-  } else {
-    texts.push({ x: 0, y: 40, w: 576, h: 138, content: `${a.text}\n\nStill at risk: ${atRisk} GRAM\n≈ say "kill it"` });
+    return {
+      texts: [head, { x: 0, y: 100, w: 576, h: 62, content: `→ ${short(a.to)}   ·   still at risk ${atRisk} GRAM\nKill revokes its key and pulls the rest back.` }],
+      images: [{ x: 0, y: 34, w: 288, h: 64, key: `alarm:${a.amount}`, draw: () => bigText(`${a.amount} GRAM`, 288, 64, { sub: 'left with no approval' }) }, glyph(a.to, 500)],
+      items, actions, listTop: 166,
+    };
   }
-  return { texts, images, items: [`■ Kill ${a.agent} now`, '× Dismiss'], actions: ['kill', 'dismiss'], listTop: 182 };
+  return { texts: [head, { x: 0, y: 40, w: 576, h: 122, content: `${a.text}\n\nStill at risk: ${atRisk} GRAM` }], items, actions, listTop: 166 };
 }
 
 export const confirmKill = (agent: string, balance: string): Page => ({
-  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Kill ${agent}?` },
-          { x: 0, y: 98, w: 576, h: 84, content: 'Its key is revoked on chain. It can never spend again.\n≈ say "yes" or "no"' }],
+  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Kill ${agent}?   ≈ say "yes" or "no"` },
+          { x: 0, y: 100, w: 576, h: 62, content: 'Its key is revoked on chain.\nIt can never spend again.' }],
   images: [{ x: 0, y: 34, w: 288, h: 64, key: `kill:${balance}`, draw: () => bigText(`${balance} GRAM`, 288, 64, { sub: 'comes back to your vault' }) }],
-  items: ['× Cancel', '■ Yes, kill it'], actions: ['cancel', 'yesKill'], listTop: 182,
+  items: ['× Cancel', '■ Yes, kill it'], actions: ['cancel', 'yesKill'], listTop: 166,
 });
 export const confirmGive = (a: AgentRow, amount: number): Page => ({
-  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Give ${a.name}` },
-          { x: 0, y: 98, w: 576, h: 84, content: `From your vault to its wallet, now.\nToday's budget becomes ${+(num(a.daily) + amount).toFixed(3)} GRAM.\n≈ say "yes" or "no"` }],
+  texts: [{ x: 0, y: 0, w: 576, h: 34, content: `Give ${a.name}   ≈ say "yes" or "no"` },
+          { x: 0, y: 100, w: 576, h: 62, content: `From your vault to its wallet, now.\nToday's budget becomes ${+(num(a.daily) + amount).toFixed(3)} GRAM.` }],
   images: [bigAmount(String(amount))],
-  items: ['× Cancel', `▶ Yes, send ${amount}`], actions: ['cancel', 'yesGive'], listTop: 182,
+  items: ['× Cancel', `▶ Yes, send ${amount}`], actions: ['cancel', 'yesGive'], listTop: 166,
 });
 export const activity = (s: State): Page => ({
   texts: [full(s.ticker.map(t => `· ${fit(t, 62)}`).join('\n') || 'Nothing yet.', 234)],
