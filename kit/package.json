@@ -1,0 +1,1 @@
+{ "name": "reins-kit", "private": true, "type": "module", "bin": { "reins-mcp": "src/mcp.ts" } }
