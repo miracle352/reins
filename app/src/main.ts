@@ -195,12 +195,16 @@ async function onSelect(index: number) {
 
 // ---------- voice ----------
 let mic: { chunks: Uint8Array[]; resolve: (pcm: Uint8Array) => void } | null = null;
-const devVoice = import.meta.env.DEV ? new URLSearchParams(location.search).get('voice')?.split(',') ?? [] : [];
+// Dev-only test harness: replays recorded phrases. Remembers what it used, so a hot reload never replays a command.
+const devVoice = import.meta.env.DEV
+  ? (new URLSearchParams(location.search).get('voice')?.split(',') ?? []).slice(Number(sessionStorage.getItem('reins.voiceUsed') ?? 0))
+  : [];
 
 /** Records until ~0.9 s of silence after speech, or `ms`. Returns raw PCM (s16le mono 16 kHz). */
 async function record(ms: number): Promise<Uint8Array> {
   if (devVoice.length) { // test harness: replay a recorded phrase as if spoken (dev builds only)
     const name = devVoice.shift()!; await new Promise(r => setTimeout(r, 1200));
+    sessionStorage.setItem('reins.voiceUsed', String(Number(sessionStorage.getItem('reins.voiceUsed') ?? 0) + 1));
     return new Uint8Array(await (await fetch(`/voice-test/${name}.pcm`)).arrayBuffer());
   }
   const done = new Promise<Uint8Array>(resolve => { mic = { chunks: [], resolve }; });
