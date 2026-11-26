@@ -17,6 +17,12 @@ Main track: **AI Assistants & Work** (OpenRouter, Claude via MCP). Second track:
 
 These are captures of the real app in the Even Hub simulator, driving real TON testnet transactions.
 
+<img src="docs/phone.png" width="360" align="right" alt="Phone page">
+
+The phone page, in the Even app, is for the slow things: topping up the vault from Gram Wallet, daily budgets, which payees to trust, linking Telegram, and the backup words. Everything urgent happens on the lens.
+
+<br clear="right">
+
 ---
 
 ## The problem
