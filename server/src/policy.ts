@@ -18,7 +18,7 @@ export const DEFAULT_LIMITS: Limits = { perPayment: 1_000_000_000n, daily: 3_000
 const NANO = 1_000_000_000n;
 export const gram = (n: bigint) => {
   const whole = n / NANO, frac = (n % NANO).toString().padStart(9, '0').replace(/0+$/, '');
-  return frac ? `${whole}.${frac.slice(0, 3)}` : `${whole}`;
+  return frac ? `${whole}.${frac}` : `${whole}`; // never round: what you see is what gets signed
 };
 export const toNanoStr = (s: string) => {
   const [w, f = ''] = s.trim().split('.');

@@ -2,7 +2,8 @@ import {
   waitForEvenAppBridge, TextContainerProperty, ListContainerProperty, ListItemContainerProperty, ImageContainerProperty,
   CreateStartUpPageContainer, RebuildPageContainer, TextContainerUpgrade, ImageRawDataUpdate, OsEventTypeList, AudioInputSource,
 } from '@evenrealities/even_hub_sdk';
-import { toNano } from '@ton/core';
+import { toNano, Address } from '@ton/core';
+import { agentAddress } from '../../shared/ton.ts';
 import { createAgentTx, fundTx, killTx } from '../../shared/vault.ts';
 import type { Intent } from '../../shared/intent.ts';
 import { signLogin } from '../../shared/auth.ts';
@@ -160,6 +161,13 @@ async function run(fn: () => Promise<void>) {
 }
 
 async function fund(c: L.Card, trust: boolean) {
+  // Don't take the server's word for where money goes: the agent's wallet address follows from your vault and
+  // the agent's key, so derive it here. And the amount signed must be the amount on screen.
+  const derived = agentAddress(Address.parse(vault!.address), BigInt('0x' + c.operatorPub)).address;
+  if (!derived.equals(Address.parse(c.agentAddress)) || toNano(c.amount) !== BigInt(c.amountNano)) {
+    showResult('REFUSED', 'This request does not add up, so nothing was signed.\nReject it, and check your Reins server.', 8000);
+    return;
+  }
   showResult('SIGNING', 'with the vault key on your phone…', 20000);
   const seq = await vaultSeqno(vault!);
   const boc = c.kind === 'create'
