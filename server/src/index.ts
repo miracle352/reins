@@ -9,7 +9,7 @@ import { db, save, log, id, type Agent, type Req, type DB, withTenant, tenants, 
   tenantOfAgent, tenantOfToken, tenantOfLink, currentTenant } from './store.ts';
 import { verifyAgent, verifyLogin } from '../../shared/auth.ts';
 import { vaultWallet } from '../../shared/ton.ts';
-import { evaluate, DEFAULT_LIMITS, gram, toNanoStr, type Flag } from './policy.ts';
+import { evaluate, DEFAULT_LIMITS, gram, gram3, toNanoStr, type Flag } from './policy.ts';
 import { startTelegram, telegramWebhook, pairCodeFor, botName } from './telegram.ts';
 import { transcribe, warmVoice } from './voice.ts';
 import { parseIntent } from '../../shared/intent.ts';
@@ -163,11 +163,11 @@ route('GET', /^\/lens\/state$/, 'lens', async () => {
   const pending = db.requests.filter(r => r.status === 'pending').sort((x, y) => x.createdAt - y.createdAt);
   const alarm = db.agents.find(a => a.status === 'active' && a.alarm);
   return {
-    vault: db.vault, vaultBalance: gram(vaultBal), atRisk: gram(atRisk),
+    vault: db.vault, vaultBalance: gram3(vaultBal), atRisk: gram3(atRisk),
     agents: await Promise.all(db.agents.filter(a => a.status !== 'revoked' || Date.now() - a.createdAt < DAY).map(async a => ({
       id: a.id, name: a.name, address: a.address,
       status: a.frozen && a.status === 'active' ? 'frozen' : a.status,
-      balance: a.status === 'active' ? gram(await agentBal(a)) : '0',
+      balance: a.status === 'active' ? gram3(await agentBal(a)) : '0',
       spentToday: gram(spentToday(a.id)), daily: gram(limitsFor(a).daily),
       waiting: db.requests.filter(r => r.agentId === a.id && r.status === 'pending').length,
       last: lastPayment(a.id),

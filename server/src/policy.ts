@@ -20,6 +20,8 @@ export const gram = (n: bigint) => {
   const whole = n / NANO, frac = (n % NANO).toString().padStart(9, '0').replace(/0+$/, '');
   return frac ? `${whole}.${frac}` : `${whole}`; // never round: what you see is what gets signed
 };
+/** Balances, for reading: three decimals is plenty. */
+export const gram3 = (n: bigint) => gram(n - (n % 1_000_000n));
 export const toNanoStr = (s: string) => {
   const [w, f = ''] = s.trim().split('.');
   return BigInt(w || '0') * NANO + BigInt((f + '000000000').slice(0, 9));
