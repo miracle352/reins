@@ -19,6 +19,21 @@ const n = (s: string | number | undefined) => Number(s ?? 0);
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** Numbers roll to their new value instead of jumping. */
+function rollTo(el: HTMLElement, to: number) {
+  const from = Number(el.dataset.v ?? to);
+  el.dataset.v = String(to);
+  if (from === to || reduced) { el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const step = (t: number) => {
+    const k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const fmt = (v: number) => (Math.round(v * 1000) / 1000).toString();
+
 function toast(text: string) {
   const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = text;
   document.body.append(el); setTimeout(() => el.remove(), 2300);
@@ -83,17 +98,17 @@ export function mountPhone(ctx: Ctx) {
     }
     root.innerHTML = `
       <header class="top">
-        <h1 class="mark">REINS</h1>
-        <a href="#vault"><b class="num" id="vbal">…</b> in your vault</a>
+        <h1 class="mark"><svg width="24" height="24" viewBox="0 0 26 26" aria-hidden="true"><circle cx="9" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="8.5" r="1.9" fill="currentColor"/><path d="M11.3 13.4 C12.3 21 15 22 22 19.5" fill="none" stroke="#c8925a" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="19.5" r="1.8" fill="#c8925a"/></svg>REINS</h1>
+        <a class="pill" href="#vault"><b class="num" id="vbal">…</b> GRAM</a>
       </header>
       <div class="stage" id="stage"><span class="vaultlabel">your vault</span><svg aria-hidden="true"></svg></div>
-      <p class="now" id="now" aria-live="polite"></p>
-      <section id="agent" hidden></section>
-      <section id="connect"></section>
-      <section id="payees"></section>
-      <section id="telegram"></section>
-      <section id="activity"></section>
-      <section id="vault"></section>`;
+      <div class="now" id="now" aria-live="polite"></div>
+      <section class="card" id="agent" hidden></section>
+      <section class="card" id="connect"></section>
+      <section class="card" id="payees"></section>
+      <section class="card" id="telegram"></section>
+      <section class="card" id="activity"></section>
+      <section class="card" id="vault"></section>`;
     stage = new Stage(root.querySelector('#stage')!, id => { selected = id; update(); });
     root.addEventListener('click', onClick);
   }
@@ -103,19 +118,19 @@ export function mountPhone(ctx: Ctx) {
     const v = ctx.getVault()!, s = ctx.getState();
     const $ = (q: string) => root.querySelector(q) as HTMLElement;
     if (!s) { $('#now').textContent = `Looking for your Reins server at ${ctx.getServer()}…`; return; }
-    $('#vbal').textContent = `${s.vaultBalance} GRAM`;
+    rollTo($('#vbal'), Number(s.vaultBalance));
     const live = s.agents.filter(a => a.status === 'active' || a.status === 'frozen');
     if (!selected || !s.agents.some(a => a.id === selected)) selected = live[0]?.id ?? null;
     stage!.render(s, selected);
 
     // One sentence on what is going on now.
     const now = $('#now');
-    now.className = 'now' + (s.alarm ? ' alarm' : '');
+    now.className = 'now' + (s.alarm ? ' alarm' : s.pending ? ' waiting' : '');
     if (s.alarm) now.innerHTML = `${esc(s.alarm.agent)} moved ${esc(s.alarm.amount ?? 'money')} GRAM you never approved. Kill it from your glasses.`;
     else if (s.pending) {
       const c = s.pending;
       const what = c.kind === 'create' ? 'wants a wallet' : `asks ${esc(c.amount)} GRAM for ${esc(c.toName ?? short(c.to!))}`;
-      now.innerHTML = `<span class="lensdot"></span>${esc(c.agent)} ${what}. Answer on your glasses.${s.pendingCount > 1 ? ` ${s.pendingCount - 1} more after that.` : ''}`;
+      now.innerHTML = `<span class="lensdot"></span><span>${esc(c.agent)} ${what}. Answer on your glasses.${s.pendingCount > 1 ? ` ${s.pendingCount - 1} more after that.` : ''}</span>`;
     } else if (!live.length) now.textContent = 'No agents yet. Connect one below and it will appear here.';
     else now.textContent = `Nothing is waiting for you. ${s.spentToday} GRAM spent today.`;
 
@@ -156,7 +171,7 @@ export function mountPhone(ctx: Ctx) {
     put(el, `
       <h2>Connect an agent</h2>
       <p>Give an agent this code once. It gets its own small wallet the moment you approve it on your glasses, and nothing more.</p>
-      <div class="code" id="linkcode">${esc(s.link ?? '…')}</div>
+      <div class="code" id="linkcode" aria-label="${esc(s.link ?? '')}">${[...(s.link ?? '…')].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div>
       <button data-copy="${esc(s.link ?? '')}">Copy code</button>
       <button class="quiet" data-newlink>Make a new code</button>
       <details style="margin-top:14px"><summary>Setup for Claude Code, Hermes, Codex</summary>
@@ -331,6 +346,8 @@ class Stage {
     });
     for (const [id, r] of this.reins) if (!shown.some(a => a.id === id)) { r.path.remove(); r.node.remove(); this.reins.delete(id); }
     this.el.classList.toggle('empty', !shown.length);
+    this.el.classList.toggle('waiting', !!s.pendingCount);
+    this.el.classList.toggle('alarm', !!s.alarm);
     this.first = false;
   }
 
