@@ -4,7 +4,7 @@ import { Address } from '@ton/core';
 import { agentAddress, fmt, fmtUser, isLookalike } from '../../shared/ton.ts';
 import * as chain from './chain.ts';
 import { db, save, log, id, type Agent, type Req } from './store.ts';
-import { evaluate, DEFAULT_LIMITS, gram, toNanoStr } from './policy.ts';
+import { evaluate, DEFAULT_LIMITS, gram, toNanoStr, type Flag } from './policy.ts';
 import { startTelegram } from './telegram.ts';
 import { transcribe, warmVoice } from './voice.ts';
 import { parseIntent } from '../../shared/intent.ts';
@@ -69,9 +69,12 @@ route('POST', /^\/kit\/agents$/, async b => {
   if (existing) return { agentId: existing.id, address: existing.address, status: existing.status };
   const { index, address } = agentAddress(Address.parse(db.vault), pub);
   const agent: Agent = { id: id(), name: String(b.name ?? 'agent').slice(0, 20), operatorPub: b.operatorPub, address: fmt(address), index: index.toString(), status: 'awaiting_create', createdAt: Date.now() };
+  // A second process using a live agent's name is either a lost key file or something posing as that agent.
+  const twin = db.agents.find(a => a.status === 'active' && a.name.toLowerCase() === agent.name.toLowerCase());
+  const flags: Flag[] = twin ? [{ code: 'NAME_TAKEN', text: `${twin.name} already has a wallet` }] : [];
   db.agents.push(agent);
-  db.requests.push({ id: id(), agentId: agent.id, kind: 'create', purpose: `New agent wants a wallet`, flags: [], status: 'pending', auto: false, createdAt: Date.now() });
-  log(`${agent.name} asked for a wallet`, 'info', { agentId: agent.id, requestId: db.requests[db.requests.length - 1].id }); save();
+  db.requests.push({ id: id(), agentId: agent.id, kind: 'create', purpose: `New agent wants a wallet`, flags, status: 'pending', auto: false, createdAt: Date.now() });
+  log(flags.length ? `${agent.name} asked for a wallet !! ${flags[0].text}, different key` : `${agent.name} asked for a wallet`, flags.length ? 'warn' : 'info', { agentId: agent.id, requestId: db.requests[db.requests.length - 1].id }); save();
   return { agentId: agent.id, address: agent.address, status: agent.status };
 });
 

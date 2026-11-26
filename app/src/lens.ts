@@ -80,17 +80,23 @@ export function agentPage(a: AgentRow): Page {
 }
 
 // ---------- a request ----------
-export const isClean = (c: Card) => c.kind === 'create' || c.flags.length === 0;
+export const isClean = (c: Card) => c.flags.length === 0;
 
 export function card(c: Card, waiting: number): Page {
   const more = waiting > 1 ? ` · ${waiting - 1} more waiting` : '';
   if (c.kind === 'create') {
+    const clash = c.flags.length > 0;
     return {
-      texts: [{ x: 0, y: 0, w: 496, h: 34, content: `${c.agent} wants a wallet${more}   ≈ say "approve"` },
-              { x: 0, y: 100, w: 576, h: 62, content: 'Its starting buffer. Anything beyond its rules\ncomes back to you here.' },
+      texts: [{ x: 0, y: 0, w: 496, h: 34, content: `${c.agent} wants a wallet${more}   ${clash ? '≈ say "why"' : '≈ say "approve"'}` },
+              { x: 0, y: 100, w: 576, h: 62, content: clash
+                ? `! ${c.flags[0].text}. Same name, different key:\na lost key file, or something posing as it.`
+                : 'Its starting buffer. Anything beyond its rules\ncomes back to you here.' },
               { x: 470, y: 72, w: 106, h: 34, content: 'its wallet' }],
       images: [bigAmount(c.amount), glyph(c.agentAddress, 500)],
-      items: [`▶ Create wallet  ${c.amount}`, '× Reject'], actions: ['approve', 'reject'], listTop: 166,
+      ...(clash
+        ? { items: ['× Reject', `▶ Create anyway  ${c.amount}`], actions: ['reject', 'approve'] as Action[] }
+        : { items: [`▶ Create wallet  ${c.amount}`, '× Reject'], actions: ['approve', 'reject'] as Action[] }),
+      listTop: 166,
     };
   }
   const who = c.toName ?? short(c.to!);
@@ -103,7 +109,7 @@ export function card(c: Card, waiting: number): Page {
   const lines = [`→ ${who}   "${fit(c.purpose, 36)}"`];
   if (clean) lines.push('● known payee · matches what it said');
   else lines.push(c.flags.slice(0, 2).map(f => `! ${f.text}`).join('   '));
-  const hint = clean ? '≈ say "approve"' : '≈ tap to approve · say "why"';
+  const hint = clean ? '≈ say "approve"' : more ? '≈ say "why"' : '≈ tap to approve · say "why"';
   const texts: Txt[] = [{ x: 0, y: 0, w: 416, h: 34, content: `${c.agent} asks${more}   ${hint}` },
                         { x: 0, y: 100, w: 576, h: 62, content: lines.join('\n') },
                         { x: twin ? 418 : 470, y: 72, w: twin ? 158 : 106, h: 34, content: label }];
@@ -125,6 +131,7 @@ const WHY: Record<string, string> = {
   OVER_LIMIT: 'It is more than a single payment is allowed to be.',
   DAILY_CAP: 'It would take this agent over its budget for today.',
   BAD_ADDRESS: 'That is not a valid TON address.',
+  NAME_TAKEN: 'A different key is using the name of an agent you already run. If you did not reinstall it, reject.',
 };
 export function why(c: Card): Page {
   const body = c.flags.length

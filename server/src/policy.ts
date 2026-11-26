@@ -9,7 +9,8 @@ export type Flag =
   | { code: 'MISMATCH'; text: string }
   | { code: 'OVER_LIMIT'; text: string }
   | { code: 'DAILY_CAP'; text: string }
-  | { code: 'BAD_ADDRESS'; text: string };
+  | { code: 'BAD_ADDRESS'; text: string }
+  | { code: 'NAME_TAKEN'; text: string };
 
 export type Limits = { perPayment: bigint; daily: bigint };
 export const DEFAULT_LIMITS: Limits = { perPayment: 1_000_000_000n, daily: 3_000_000_000n };
