@@ -198,7 +198,7 @@ async function onSelect(index: number) {
     case 'back': view = view.t === 'why' ? { t: 'home' } : { t: 'home' }; return render();
     case 'voice': {
       const n = view.t === 'agent' ? agentById(view.id)?.name : state.agents.find(a => a.status === 'active')?.name;
-      return void listenFor(`Try "give ${n ?? 'my agent'} 1 more", "pause ${n ?? 'my agent'}"\nor "how much today"`);
+      return void listenFor(n ? `Try "give ${n} 1 more", "pause ${n}"\nor "how much today"` : 'Try "how much today".\nWith an agent: "give <name> 1 more", "pause <name>".');
     }
     case 'activity': view = { t: 'activity' }; return render();
     case 'give': if (view.t === 'agent') { view = { t: 'confirmGive', agentId: view.id, amount: 0.5 }; return render(); } return;
@@ -308,7 +308,7 @@ async function act(i: Intent, heard: string): Promise<boolean> {
       if (!a) { showNote(`${said}\nWhich agent?`); return false; }
       await run(() => pause(a.id, i.kind === 'pause')); return true;
     }
-    case 'status': showNote(`Today ${state.spentToday} GRAM spent\n${state.atRisk} GRAM at risk in agent wallets\nVault ${state.vaultBalance} GRAM`, 5000); return true;
+    case 'status': showResult(`${state.spentToday} GRAM`, `spent today   ·   ${state.atRisk} at risk   ·   vault ${state.vaultBalance}`, 5000); return true;
     default: {
       const n = state.agents.find(a => a.status === 'active')?.name ?? 'my agent';
       showNote(`${said}\n\nTry "approve", "reject", "why",\n"give ${n} 1 more" or "pause ${n}".`, 4500); return false;
