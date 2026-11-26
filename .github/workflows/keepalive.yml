@@ -8,4 +8,4 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsS --max-time 90 "${{ vars.REINS_URL }}/health"
+      - run: curl -fsS --max-time 90 "${{ vars.REINS_URL || 'https://reins-jhyz.onrender.com' }}/health"

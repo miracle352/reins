@@ -8,15 +8,14 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Talks to your Reins server, which relays agent requests and reads the TON testnet.",
+      "desc": "Talks to the Reins server (reins-jhyz.onrender.com), which relays your agents’ requests and reads the TON testnet.",
       "whitelist": [
-        "http://localhost:8787",
-        "http://127.0.0.1:8787"
+        "https://reins-jhyz.onrender.com"
       ]
     },
     {
       "name": "g2-microphone",
-      "desc": "Hands-free answers: while a request is on screen, Reins listens for a few seconds for \"approve\", \"reject\" or \"why\". Audio is transcribed on your own Reins server."
+      "desc": "While a request is on your glasses, Reins listens for a few seconds for \"approve\", \"reject\" or \"why\". Audio is turned into text by the Reins server and not stored."
     }
   ],
   "supported_languages": [

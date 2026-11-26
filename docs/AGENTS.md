@@ -14,7 +14,7 @@ Each agent needs its own `REINS_AGENT_NAME`; that name is what you see on the le
 
 **Timeouts.** `reins_pay` and `reins_connect` wait for you to decide (up to 5 and 10 minutes). Raise your agent's MCP tool timeout as shown below, or it will give up before you look up.
 
-Replace `/path/to/reins` with your clone, and point `REINS_SERVER` at your Reins server.
+Replace `/path/to/reins` with your clone. Agents talk to the hosted server (`https://reins-jhyz.onrender.com`) unless you set `REINS_SERVER` to your own.
 
 ## Claude Code
 
@@ -22,7 +22,6 @@ Replace `/path/to/reins` with your clone, and point `REINS_SERVER` at your Reins
 claude mcp add reins \
   -e REINS_AGENT_NAME=claude \
   -e REINS_LINK=ABCD-2345 \
-  -e REINS_SERVER=http://localhost:8787 \
   -- npx tsx /path/to/reins/kit/src/mcp.ts
 
 # let a payment wait for you (milliseconds)
@@ -42,7 +41,6 @@ mcp_servers:
     env:
       REINS_AGENT_NAME: "hermes"
       REINS_LINK: "ABCD-2345"
-      REINS_SERVER: "http://localhost:8787"
     timeout: 600
 ```
 
@@ -61,7 +59,6 @@ tool_timeout_sec = 600
 [mcp_servers.reins.env]
 REINS_AGENT_NAME = "codex"
 REINS_LINK = "ABCD-2345"
-REINS_SERVER = "http://localhost:8787"
 ```
 
 ## Your own agent (no MCP)

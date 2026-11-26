@@ -8,7 +8,7 @@ import { agentPayBody } from '../../shared/ton.ts';
 import { signAgent } from '../../shared/auth.ts';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-export const DEFAULT_SERVER = 'http://localhost:8787';
+export const DEFAULT_SERVER = 'https://reins-jhyz.onrender.com';
 const GAS = 20_000_000n; // 0.02 GRAM kept for fees
 
 export type PayResult =
