@@ -54,7 +54,7 @@ route('POST', /^\/kit\/agents$/, async b => {
   const agent: Agent = { id: id(), name: String(b.name ?? 'agent').slice(0, 20), operatorPub: b.operatorPub, address: fmt(address), index: index.toString(), status: 'awaiting_create', createdAt: Date.now() };
   db.agents.push(agent);
   db.requests.push({ id: id(), agentId: agent.id, kind: 'create', purpose: `New agent wants a wallet`, flags: [], status: 'pending', auto: false, createdAt: Date.now() });
-  log(`${agent.name} asked for a wallet`); save();
+  log(`${agent.name} asked for a wallet`, 'info', { agentId: agent.id, requestId: db.requests[db.requests.length - 1].id }); save();
   return { agentId: agent.id, address: agent.address, status: agent.status };
 });
 
@@ -68,6 +68,7 @@ route('GET', /^\/kit\/agents\/(\w+)$/, async (_b, [aid]) => {
 route('POST', /^\/kit\/pay$/, async b => {
   const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
   if (a.status === 'revoked') throw new HttpError(403, 'This agent was revoked by its owner.');
+  if (a.frozen) throw new HttpError(403, 'This agent is frozen by its owner. Do not retry.');
   if (a.status !== 'active') throw new HttpError(409, 'Agent wallet not created yet. Approve it on your glasses.');
   const amount = toNanoStr(String(b.amount));
   const purpose = String(b.purpose ?? '').slice(0, 140);
@@ -78,7 +79,7 @@ route('POST', /^\/kit\/pay$/, async b => {
   db.requests.push(r);
   log(v.auto
     ? `Auto-approved ${gram(amount)} → ${v.contact!.name} (${a.name})`
-    : `${a.name} asks ${gram(amount)} GRAM${v.flags.length ? ' ⚠ ' + v.flags.map(f => f.text).join(', ') : ''}`, v.flags.length ? 'warn' : 'info');
+    : `${a.name} asks ${gram(amount)} GRAM${v.flags.length ? ' ⚠ ' + v.flags.map(f => f.text).join(', ') : ''}`, v.flags.length ? 'warn' : 'info', { agentId: a.id, requestId: v.auto ? undefined : r.id });
   save();
   return r;
 });
@@ -116,10 +117,11 @@ route('GET', /^\/lens\/state$/, async () => {
   let atRisk = 0n;
   for (const a of db.agents.filter(a => a.status === 'active')) atRisk += await agentBal(a);
   const pending = db.requests.filter(r => r.status === 'pending').sort((x, y) => x.createdAt - y.createdAt);
-  const alarm = db.agents.find(a => a.alarm && a.status === 'active');
+  const alarmAgent = db.agents.find(a => a.status === 'active' && (a.alarm || a.frozen));
+  const alarm = alarmAgent ? { ...alarmAgent, alarm: alarmAgent.alarm ?? 'Frozen from Telegram. Its buffer is still in its wallet.' } : undefined;
   return {
     vault: db.vault, vaultBalance: gram(vaultBal), atRisk: gram(atRisk),
-    agents: db.agents.map(a => ({ id: a.id, name: a.name, status: a.status })),
+    agents: db.agents.map(a => ({ id: a.id, name: a.name, status: a.frozen && a.status === 'active' ? 'frozen' : a.status })),
     alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
     ticker: db.events.slice(0, 3).map(e => e.text),
@@ -159,7 +161,7 @@ route('POST', /^\/lens\/kill$/, async b => {
 });
 
 route('POST', /^\/lens\/dismiss$/, async b => {
-  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; log(`Alarm on ${a.name} dismissed`); save(); }
+  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; a.frozen = false; log(`Alarm on ${a.name} dismissed`); save(); }
   return { ok: true };
 });
 
@@ -189,8 +191,8 @@ async function watchOnce() {
         const match = db.requests.find(r => r.agentId === a.id && r.kind === 'pay' && ['approved', 'paid'].includes(r.status)
           && !(r as any).matched && BigInt(r.amount!) === t.amount && Address.parse(r.to!).equals(Address.parse(t.to)));
         if (match) { (match as any).matched = t.hash; continue; }
-        a.alarm = `${gram(t.amount)} GRAM left to ${t.to.slice(0, 4)}…${t.to.slice(-4)} with no approval`;
-        log(`ALARM ${a.name}: ${a.alarm}`, 'alarm');
+        a.alarm = `${gram(t.amount)} GRAM left to ${t.to.slice(2, 6)}…${t.to.slice(-4)} with no approval`;
+        log(`ALARM ${a.name}: ${a.alarm}`, 'alarm', { agentId: a.id });
       }
       save();
     } catch (e) { console.error('watchdog', a.name, (e as Error).message); }
@@ -216,4 +218,25 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   send(404, { error: 'not found' });
 }).listen(PORT, () => console.log(`reins server on :${PORT}`));
 
-startTelegram();
+startTelegram({
+  reject(requestId) {
+    const r = db.requests.find(x => x.id === requestId);
+    if (!r || r.status !== 'pending') return 'Already decided.';
+    r.status = 'rejected'; r.decidedAt = Date.now(); r.note = 'rejected from Telegram';
+    if (r.kind === 'create') db.agents = db.agents.filter(x => x.id !== r.agentId);
+    log(`Rejected from Telegram: ${agentOf(r.agentId)?.name ?? 'agent'}`, 'warn'); save(); return 'Rejected.';
+  },
+  freeze(agentId, on) {
+    const a = agentOf(agentId); if (!a) return 'Unknown agent.';
+    a.frozen = on;
+    if (on) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent frozen'; }
+    log(on ? `FROZEN ${a.name} from Telegram: all its requests refused` : `Unfroze ${a.name}`, on ? 'alarm' : 'info'); save();
+    return on ? `${a.name} is frozen. It can only lose its small buffer now; kill it from your glasses to pull that back.` : `${a.name} unfrozen.`;
+  },
+  status() {
+    const live = db.agents.filter(a => a.status === 'active');
+    const pend = db.requests.filter(r => r.status === 'pending').length;
+    return `Vault ${db.vault ?? 'not set'}\nAgents: ${live.map(a => a.name + (a.frozen ? ' (frozen)' : '')).join(', ') || 'none'}\nWaiting for you: ${pend}`;
+  },
+  agents: () => db.agents.filter(a => a.status === 'active').map(a => ({ id: a.id, name: a.name, frozen: !!a.frozen })),
+});

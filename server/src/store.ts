@@ -5,7 +5,7 @@ import type { Contact, Flag } from './policy.ts';
 
 export type Agent = {
   id: string; name: string; operatorPub: string; address: string; index: string;
-  status: 'awaiting_create' | 'active' | 'revoked'; createdAt: number; alarm?: string;
+  status: 'awaiting_create' | 'active' | 'revoked'; createdAt: number; alarm?: string; frozen?: boolean;
 };
 export type Req = {
   id: string; agentId: string; kind: 'create' | 'pay';
@@ -13,7 +13,7 @@ export type Req = {
   status: 'pending' | 'approved' | 'rejected' | 'paid' | 'failed';
   auto: boolean; createdAt: number; decidedAt?: number; fundTx?: string; payTx?: string; note?: string;
 };
-export type Event = { t: number; text: string; level: 'info' | 'warn' | 'alarm' };
+export type Event = { t: number; text: string; level: 'info' | 'warn' | 'alarm'; requestId?: string; agentId?: string };
 export type DB = {
   vault?: string; agents: Agent[]; requests: Req[]; contacts: Contact[];
   events: Event[]; seenLt: Record<string, string>; telegramChat?: number; pairCode?: string;
@@ -37,8 +37,8 @@ export function save() {
 
 const listeners: ((e: Event) => void)[] = [];
 export const onEvent = (fn: (e: Event) => void) => listeners.push(fn);
-export function log(text: string, level: Event['level'] = 'info') {
-  const e = { t: Date.now(), text, level };
+export function log(text: string, level: Event['level'] = 'info', meta: { requestId?: string; agentId?: string } = {}) {
+  const e: Event = { t: Date.now(), text, level, ...meta };
   db.events.unshift(e); db.events.length = Math.min(db.events.length, 200);
   save(); listeners.forEach(fn => { try { fn(e); } catch {} });
   console.log(`[${level}] ${text}`);
