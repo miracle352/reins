@@ -99,7 +99,7 @@ export function card(c: Card, waiting: number): Page {
   const images: Img[] = [bigAmount(c.amount)];
   let label: string;
   if (twin) { images.push(glyph(c.to!, 420), glyph(twin.address, 500)); label = ' this  ≠  known'; }
-  else { images.push(glyph(c.to!, 500)); label = clean ? ' known' : ' new'; }
+  else { images.push(glyph(c.to!, 500)); label = c.toName ? ' known' : ' new'; }
   const lines = [`→ ${who}   "${fit(c.purpose, 36)}"`];
   if (clean) lines.push('● known payee · matches what it said');
   else lines.push(c.flags.slice(0, 2).map(f => `! ${f.text}`).join('   '));
