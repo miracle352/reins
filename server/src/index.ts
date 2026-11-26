@@ -298,8 +298,10 @@ startTelegram({
     const r = db.requests.find(x => x.id === requestId);
     if (!r || r.status !== 'pending') return 'Already decided.';
     r.status = 'rejected'; r.decidedAt = Date.now(); r.note = 'rejected from Telegram';
+    const name = agentOf(r.agentId)?.name ?? 'agent';
     if (r.kind === 'create') db.agents = db.agents.filter(x => x.id !== r.agentId);
-    log(`Rejected from Telegram: ${agentOf(r.agentId)?.name ?? 'agent'}`, 'warn'); save(); return 'Rejected.';
+    log(`Rejected from Telegram: ${name}`, 'warn'); save();
+    return r.kind === 'create' ? `Rejected. ${name} gets no wallet.` : `Rejected. ${name} was not paid.`;
   },
   freeze(agentId, on) {
     const a = agentOf(agentId); if (!a) return 'Unknown agent.';

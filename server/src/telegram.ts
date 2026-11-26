@@ -76,7 +76,10 @@ export function startTelegram(actions: Actions) {
     const [kind, id] = String(q.data).split(':');
     const answer = kind === 'rej' ? actions.reject(id) : kind === 'frz' ? actions.freeze(id, true) : kind === 'unf' ? actions.freeze(id, false) : 'Unknown action.';
     await tg('answerCallbackQuery', { callback_query_id: q.id, text: answer.slice(0, 190) }).catch(() => {});
-    await send(answer);
+    // Change the alert itself, so the chat shows what happened and the buttons can't be pressed twice.
+    const m = q.message;
+    if (m?.text) await tg('editMessageText', { chat_id: m.chat.id, message_id: m.message_id, text: `${m.text}\n\n→ ${answer}` }).catch(() => send(answer));
+    else await send(answer);
   }
 
   void loop();
