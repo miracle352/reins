@@ -9,17 +9,17 @@ Reins is an Even G2 app that lets you approve, refuse and kill the AI agents tha
 Built for *Heads Up: Even Realities Hackathon* (TVM Ventures × Daos Hub).
 Main track: **AI Assistants & Work** (OpenRouter, Claude via MCP). Second track: **Crypto & DeFi** (TON, Gram Wallet). Also entered for **Best Telegram integration**.
 
-| A request you can trust | A poisoned one: *this ≠ known* | A hijacked key | One tap later |
+| A request you can trust | A poisoned address | A hijacked key | An agent that isn't yours |
 |---|---|---|---|
-| ![clean](docs/lens_clean.png) | ![lookalike](docs/lens_lookalike.png) | ![alarm](docs/lens_hijack_alarm.png) | ![killed](docs/lens_killed_result.png) |
-| **Home** | **An agent** | **A new agent** | **Voice** |
-| ![home](docs/lens_home.png) | ![agent](docs/lens_agent.png) | ![new](docs/lens_new_agent.png) | ![listen](docs/lens_listening.png) |
+| ![safe](docs/lens-safe.png) | ![lookalike](docs/lens-lookalike.png) | ![alarm](docs/lens-alarm.png) | ![impostor](docs/lens-impostor.png) |
+| **Home** | **An agent** | **Injected amount** | **Killed** |
+| ![home](docs/lens-home.png) | ![agent](docs/lens-agent.png) | ![mismatch](docs/lens-mismatch.png) | ![killed](docs/lens-killed.png) |
 
 These are captures of the real app in the Even Hub simulator, driving real TON testnet transactions.
 
 <img src="docs/phone.png" width="360" align="right" alt="Phone page">
 
-The phone page, in the Even app, is for the slow things: topping up the vault from Gram Wallet, daily budgets, which payees to trust, linking Telegram, and the backup words. Everything urgent happens on the lens.
+The phone page, in the Even app, shows your vault with a rein running to each agent. A rein pulls tighter as its agent spends its daily budget, each payment runs down it as it happens, and a killed agent's rein snaps. Below that are the slow things: budgets, payees you trust, the code that connects a new agent, Telegram, and your backup words. Everything urgent happens on the lens.
 
 <br clear="right">
 
@@ -42,11 +42,12 @@ So today the owner either over-funds the agent and hopes, or babysits a web dash
 3. **Checks in plain code, not AI.** Reins flags new payees, lookalike addresses (address poisoning), amounts that don't match what the agent said, and limit breaches. No model decides whether money moves.
 4. **Watchdog.** Every outgoing transfer from every agent wallet is matched against what you or your rules approved. Anything else raises an alarm on your lens.
 5. **Kill switch.** One tap revokes the agent's key on chain and pulls its remaining balance back to your vault, in a single transaction.
-6. **Hands-free.** When a request lands, Reins listens for a few seconds: "approve", "reject", "why", "kill it". From the home screen: "give trip-bot one more", "pause shop-bot". Speech is transcribed by a Whisper model on your own Reins server, so your voice never goes to a third party. Voice can only approve clean requests; anything flagged needs a tap.
-7. **Address fingerprints.** Every address gets a small pattern drawn from its hash. When a payment goes to a lookalike of someone you trust, the card shows both patterns side by side, *this ≠ known*. Attackers can copy the characters people glance at; they cannot copy the pattern.
-8. **Big type where it matters.** The amount on every request, and every result (SENT, REJECTED, KILLED), is drawn large on an image layer, something the firmware font cannot do.
+6. **Hands-free.** When a request lands, Reins listens for a few seconds: "approve", "reject", "why", "kill it". From the home screen: "give trip-bot one more", "pause shop-bot". Self-hosted, speech is transcribed by Whisper on your own server; the hosted server uses Groq's Whisper. Voice can only approve clean requests; anything flagged needs a tap.
+7. **Address prints.** Every address gets a ring code drawn from its hash. When a payment goes to a lookalike of someone you trust, the lens shows both side by side with ≠ between. Attackers can copy the characters people glance at; they can't copy the print.
+8. **One verdict per screen.** SAFE, CHECK, STOP or ALARM, in big condensed type drawn on the image layer (the firmware font has one size), with the amount next to it. The reason is one line; "why" has the rest.
 9. **A home screen worth a glance.** Every agent with today's spend against its daily budget and its last payment. Open one to pause it, give it more for today, or kill it.
-10. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
+10. **Open to anyone.** One server serves many people. Each phone proves it holds its vault key before it can see anything; agents sign every request with their own key and need your link code to ask for a wallet. The phone derives each agent's wallet address itself before signing, so even a lying server can't redirect a payment. Details: [SECURITY.md](SECURITY.md).
+11. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
 
 It uses TON's agentic wallet contract **unchanged**, so any agent built on the standard can use it.
 
@@ -112,7 +113,7 @@ OPENROUTER_API_KEY=... npx tsx demo/trip-agent.ts
 ### Use it from Claude Code, Hermes, Codex or any MCP agent
 
 ```bash
-claude mcp add reins -e REINS_AGENT_NAME=claude -- npx tsx /path/to/reins/kit/src/mcp.ts
+claude mcp add reins -e REINS_AGENT_NAME=claude -e REINS_LINK=<your code> -- npx tsx /path/to/reins/kit/src/mcp.ts
 ```
 
 The agent gets `reins_connect`, `reins_wallet` and `reins_pay`, and never sees a key. Setup for Hermes and Codex, timeouts, and what we learned running real models against it: [docs/AGENTS.md](docs/AGENTS.md).
