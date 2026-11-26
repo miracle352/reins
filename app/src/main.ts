@@ -13,6 +13,9 @@ import { mountPhone } from './phone.ts';
 
 const bridge = await waitForEvenAppBridge();
 const store = { get: (k: string) => bridge.getLocalStorage(k), set: (k: string, v: string) => bridge.setLocalStorage(k, v) };
+const params = new URLSearchParams(location.search);
+// ?tour: anyone (judges, people without G2) can step through every screen with sample data, in the official simulator.
+const tourMode = params.has('tour');
 const SERVER_KEY = 'reins.server';
 let server = (await store.get(SERVER_KEY).catch(() => '')) || (import.meta.env.VITE_REINS_SERVER as string) || 'http://localhost:8787';
 
@@ -355,17 +358,20 @@ bridge.onEvenHubEvent(event => {
 
 // ---------- boot ----------
 vault = await loadVault(store);
-mountPhone({
+if (!tourMode) mountPhone({
   getVault: () => vault, getServer: () => server, getState: () => state as any, api,
   async setServer(url) { server = url.replace(/\/$/, ''); await store.set(SERVER_KEY, server); await hello(); },
   async create() { vault = await createVault(store); await hello(); return vault; },
   async import(words) { vault = await importVault(store, words); await hello(); return vault; },
 });
 // Dev gallery: /?gallery shows every screen with sample data; a tap moves to the next.
-const galleryMode = import.meta.env.DEV && new URLSearchParams(location.search).has('gallery');
+const galleryMode = tourMode || (import.meta.env.DEV && params.has('gallery'));
 let galleryAt = 0;
 async function galleryNext(step = 1) {
-  const { gallery } = await import('./fixtures.ts');
+  const { gallery: all } = await import('./fixtures.ts');
+  const gallery: typeof all = tourMode
+    ? [['tour', L.hello('TOUR', 'Sample data, real screens.\nTap to step through.')], ...all.filter(([n]) => n !== 'splash'), ['end', L.hello('THAT\'S REINS', 'Double-tap to leave the tour.')]]
+    : all;
   galleryAt = (galleryAt + step + gallery.length) % gallery.length;
   const [name, page] = gallery[galleryAt];
   console.log('gallery', name);
@@ -376,7 +382,7 @@ async function hello() { if (vault) { token = ''; await api('POST', '/lens/hello
 if (import.meta.env.DEV && new URLSearchParams(location.search).has('pagetour')) {
   let y = 0; setInterval(() => { y = y + 640 > document.body.scrollHeight ? 0 : y + 640; scrollTo(0, y); }, 4000);
 }
-if (galleryMode) await galleryNext(0);
+if (galleryMode) { if (tourMode) await import('./demo.ts'); await galleryNext(0); }
 else {
   await render();
   setTimeout(() => void render(), 1900); // leave the splash

@@ -10,7 +10,8 @@
   "scripts": {
     "server": "tsx --env-file-if-exists=.env server/src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "demo:build": "cd app && vite build --config vite.demo.config.ts && mv ../site/app/demo.html ../site/app/index.html"
+    "demo:build": "cd app && vite build --config vite.demo.config.ts && mv ../site/app/demo.html ../site/app/index.html",
+    "glasses:build": "cd app && VITE_REINS_SERVER=https://reins-jhyz.onrender.com vite build --config vite.glasses.config.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",

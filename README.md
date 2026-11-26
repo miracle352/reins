@@ -25,6 +25,12 @@ The phone page, in the Even app, shows your vault with a rein running to each ag
 
 ---
 
+## Try it (no glasses needed)
+
+- **Phone page in your browser:** https://reins-jhyz.onrender.com/app/
+- **Every glasses screen, in Even's official simulator:** `npx @evenrealities/evenhub-simulator "https://reins-jhyz.onrender.com/glasses/?tour"`
+- **The full flow on TON testnet, and on real G2:** https://reins-jhyz.onrender.com/try.html
+
 ## The problem
 
 In April 2026 TON Tech shipped **Agentic Wallets**: an open standard that gives Telegram AI agents their own on-chain wallet. It is a big step, and it ships with a gap TON's own docs spell out:
