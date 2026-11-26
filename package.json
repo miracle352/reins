@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "server": "tsx --env-file-if-exists=.env server/src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo:build": "cd app && vite build --config vite.demo.config.ts && mv ../site/app/demo.html ../site/app/index.html"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",

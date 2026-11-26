@@ -342,13 +342,14 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
 
 // The landing page (site/) is served from the same place as the API.
 const SITE = new URL('../../site/', import.meta.url).pathname;
-const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.css': 'text/css' };
+const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.css': 'text/css', '.js': 'text/javascript' };
 function serveSite(path: string, res: ServerResponse) {
-  const rel = path === '/' ? 'index.html' : path.slice(1);
+  if (path === '/app') { res.writeHead(301, { location: '/app/' }).end(); return true; }
+  const rel = path === '/' ? 'index.html' : path.endsWith('/') ? path.slice(1) + 'index.html' : path.slice(1);
   if (rel.includes('..') || !/^[\w./-]+$/.test(rel)) return false;
   const file = join(SITE, rel), type = TYPES[extname(file)];
   if (!type || !existsSync(file)) return false;
-  res.writeHead(200, { 'content-type': type, 'cache-control': rel === 'index.html' ? 'no-cache' : 'public, max-age=86400' });
+  res.writeHead(200, { 'content-type': type, 'cache-control': rel.endsWith('index.html') ? 'no-cache' : 'public, max-age=86400' });
   res.end(readFileSync(file)); return true;
 }
 
