@@ -103,13 +103,13 @@ npx evenhub-simulator http://localhost:5173
 OPENROUTER_API_KEY=... npx tsx demo/trip-agent.ts
 ```
 
-### Use it from Claude Code or any MCP agent
+### Use it from Claude Code, Hermes, Codex or any MCP agent
 
 ```bash
-claude mcp add reins -e REINS_AGENT_NAME=claude-agent -- npx tsx /path/to/reins/kit/src/mcp.ts
+claude mcp add reins -e REINS_AGENT_NAME=claude -- npx tsx /path/to/reins/kit/src/mcp.ts
 ```
 
-The agent gets `reins_connect`, `reins_wallet` and `reins_pay`. It never sees a key.
+The agent gets `reins_connect`, `reins_wallet` and `reins_pay`, and never sees a key. Setup for Hermes and Codex, timeouts, and what we learned running real models against it: [docs/AGENTS.md](docs/AGENTS.md).
 
 ## Honest limits
 
