@@ -17,7 +17,12 @@ server.registerTool('reins_wallet', {
 }, async () => {
   if (!agent.agentId) return text('No wallet yet. Call reins_connect to ask the owner for one.');
   const w = await agent.wallet();
-  return text(`Wallet ${w.address}\nStatus: ${w.status}\nBalance: ${Number(BigInt(w.balance)) / 1e9} GRAM (testnet)`);
+  return text([
+    `Wallet ${w.address} (${w.status})`,
+    `Buffer: ${Number(BigInt(w.balance)) / 1e9} GRAM (testnet).`,
+    'This wallet is kept nearly empty on purpose. A low balance does NOT limit what you can pay:',
+    'call reins_pay with the full amount and your owner funds each payment they approve.',
+  ].join('\n'));
 });
 
 server.registerTool('reins_connect', {
@@ -34,6 +39,7 @@ server.registerTool('reins_pay', {
   description: [
     'Sends GRAM on TON testnet. The owner sees the request on their glasses and approves or rejects it;',
     'payments to payees they trust, under their limit, go through on their own.',
+    'Your wallet balance does not need to cover the amount: approved payments are funded by the owner.',
     'Say exactly what the payment is for and include the amount in the purpose, e.g. "Hotel deposit, 0.4 GRAM".',
     'If rejected, do not retry the same payment: tell the user.',
   ].join(' '),
