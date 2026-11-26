@@ -296,8 +296,8 @@ class Stage {
       const r = this.reins.get(a.id);
       if (a.status === 'revoked' && r && r.state !== 'killed') {
         this.snap(r); r.state = 'killed'; r.path.remove();
-        r.node.style.transition = 'opacity .9s'; r.node.style.opacity = '0';
-        setTimeout(() => r.node.remove(), 1000); this.reins.delete(a.id);
+        r.node.style.transition = 'opacity .25s'; r.node.style.opacity = '0';
+        setTimeout(() => r.node.remove(), 300); this.reins.delete(a.id);
       }
     }
     const shown = s.agents.filter(a => a.status === 'active' || a.status === 'frozen');
@@ -323,7 +323,7 @@ class Stage {
       r.path.setAttribute('class', `rein ${state === 'killed' ? 'ghost' : state}`);
       r.path.style.display = state === 'killed' ? 'none' : '';
       r.node.className = `node ${state === 'killed' ? 'killed' : state}${a.id === selected ? ' sel' : ''}`;
-      r.node.style.left = `${x}px`; r.node.style.top = `${NY + 8}px`;
+      r.node.style.top = `${NY + 8}px`;
       const use = state === 'killed' ? 'killed' : state === 'paused' ? 'paused' : `${a.spentToday} of ${a.daily}`;
       const html = `<span class="name">${esc(a.name)}</span><span class="use">${esc(use)}</span>${a.waiting ? '<span class="wait">on your glasses</span>' : ''}`;
       if (r.node.dataset.html !== html) { r.node.dataset.html = html; r.node.innerHTML = html; }
@@ -345,7 +345,8 @@ class Stage {
       if (r.state === 'killed') continue;
       // A spring toward the target slack, so changes in spending visibly pull the rein.
       r.sag += (r.target - r.sag) * (reduced ? 1 : 0.06);
-      r.x += (r.tx - r.x) * (reduced ? 1 : 0.15);
+      r.x += (r.tx - r.x) * (reduced ? 1 : 0.05);
+      r.node.style.left = `${r.x}px`;
       const wob = r.state === 'alarm' && !reduced ? Math.sin(now / 38) * 5 : 0;
       r.path.setAttribute('d', this.d(r.x, r.sag, wob));
       if (r.drawn < 1) {
