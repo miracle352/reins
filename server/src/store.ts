@@ -8,6 +8,7 @@ export type Agent = {
   status: 'awaiting_create' | 'active' | 'revoked'; createdAt: number; alarm?: string; frozen?: boolean;
   /** Daily budget in nanoGRAM; `boost` adds to it for one UTC day ("give trip-bot 2 more"). */
   daily?: string; boost?: { day: string; amount: string };
+  alarmInfo?: { amount: string; to: string };
 };
 export type Req = {
   id: string; agentId: string; kind: 'create' | 'pay';

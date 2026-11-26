@@ -1,7 +1,7 @@
 // Reins server: relays between agents (kit) and the glasses (lens), applies the rules, watches the chain.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Address } from '@ton/core';
-import { agentAddress, fmt, fmtUser } from '../../shared/ton.ts';
+import { agentAddress, fmt, fmtUser, isLookalike } from '../../shared/ton.ts';
 import * as chain from './chain.ts';
 import { db, save, log, id, type Agent, type Req } from './store.ts';
 import { evaluate, DEFAULT_LIMITS, gram, toNanoStr } from './policy.ts';
@@ -51,6 +51,7 @@ function cardFor(r: Req) {
     amount: r.kind === 'create' ? gram(BUFFER) : gram(BigInt(r.amount!)),
     amountNano: r.kind === 'create' ? BUFFER.toString() : r.amount,
     to: r.to, toName: contact?.name, agentAddress: a?.address, operatorPub: a?.operatorPub,
+    twin: r.to && !contact ? (() => { const t = db.contacts.find(c => { try { return isLookalike(c.address, r.to!); } catch { return false; } }); return t ? { name: t.name, address: t.address } : undefined; })() : undefined,
   };
 }
 
@@ -146,7 +147,7 @@ route('GET', /^\/lens\/state$/, async () => {
     }))),
     spentToday: gram(db.agents.reduce((s, a) => s + spentToday(a.id), 0n)),
     payees: db.contacts.map(c => ({ address: c.address, name: c.name, trusted: c.trusted, autoLimit: gram(BigInt(c.autoLimit)) })),
-    alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address } : null,
+    alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address, ...(alarm.alarmInfo ?? {}) } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
     ticker: db.events.slice(0, 8).map(e => e.text),
     telegram: db.telegramChat ? 'linked' : db.pairCode ?? null,
@@ -178,14 +179,14 @@ route('POST', /^\/lens\/decide$/, async b => {
 route('POST', /^\/lens\/kill$/, async b => {
   const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
   await chain.sendBoc(String(b.boc));
-  a.status = 'revoked'; a.alarm = undefined;
+  a.status = 'revoked'; a.alarm = undefined; a.alarmInfo = undefined;
   for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent revoked'; }
   log(`KILLED ${a.name}: key revoked, funds swept to vault`, 'alarm');
   save(); return { ok: true };
 });
 
 route('POST', /^\/lens\/dismiss$/, async b => {
-  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; log(`Alarm on ${a.name} dismissed${a.frozen ? ' (still paused)' : ''}`); save(); }
+  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; a.alarmInfo = undefined; log(`Alarm on ${a.name} dismissed${a.frozen ? ' (still paused)' : ''}`); save(); }
   return { ok: true };
 });
 
@@ -260,6 +261,7 @@ async function watchOnce() {
           && !(r as any).matched && BigInt(r.amount!) === t.amount && Address.parse(r.to!).equals(Address.parse(t.to)));
         if (match) { (match as any).matched = t.hash; continue; }
         a.alarm = `${gram(t.amount)} GRAM left to ${t.to.slice(2, 6)}…${t.to.slice(-4)} with no approval`;
+        a.alarmInfo = { amount: gram(t.amount), to: t.to };
         log(`ALARM ${a.name}: ${a.alarm}`, 'alarm', { agentId: a.id });
       }
       save();
