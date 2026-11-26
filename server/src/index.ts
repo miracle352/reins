@@ -190,7 +190,7 @@ route('POST', /^\/lens\/decide$/, 'lens', async b => {
   const a = agentOf(r.agentId)!;
   if (b.action === 'reject') {
     r.status = 'rejected'; r.decidedAt = Date.now();
-    log(`Rejected ${a.name}: ${r.kind === 'create' ? 'new wallet' : gram(BigInt(r.amount!)) + ' GRAM'}`, 'warn');
+    log(`Rejected ${a.name}: ${r.kind === 'create' ? 'new wallet' : gram(BigInt(r.amount!)) + ' GRAM'}`, 'info');
     if (r.kind === 'create') db.agents = db.agents.filter(x => x.id !== a.id);
     save(); return r;
   }
@@ -384,28 +384,84 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => void flu
 
 void warmVoice().then(how => console.log(`voice: ready (${how})`)).catch(e => console.error('voice: off', e.message));
 
+// ---------- Telegram cards ----------
+const h = (x: string) => x.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
+const shortA = (x: string) => `${x.slice(0, 6)}…${x.slice(-4)}`;
+const VIEW = (x: string) => `https://testnet.tonviewer.com/${x}`;
+const STOPS = ['LOOKALIKE', 'MISMATCH', 'BAD_ADDRESS', 'NAME_TAKEN'];
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+
+type TgCard = { html: string; buttons?: { text: string; data?: string; url?: string }[][] };
+function requestCard(r: Req, result?: string): TgCard {
+  const a = agentOf(r.agentId);
+  const name = a?.name ?? 'agent';
+  const flags = [...r.flags].sort((x, y) => +STOPS.includes(y.code) - +STOPS.includes(x.code));
+  const verdict = !flags.length ? ['🟢', 'SAFE'] : flags.some(f => STOPS.includes(f.code)) ? ['🛑', 'STOP'] : ['🟡', 'CHECK'];
+  const lines: string[] = [];
+  if (r.kind === 'create') {
+    lines.push(`${flags.length ? '🛑 <b>STOP</b>' : '🆕 <b>NEW AGENT</b>'}  ·  <b>${h(name)}</b> wants a wallet`, '');
+    lines.push(`Starting buffer   <b>${gram(BUFFER)} GRAM</b>`);
+    if (a) lines.push(`Its wallet   <a href="${VIEW(a.address)}">${shortA(a.address)}</a>`);
+  } else {
+    const c = db.contacts.find(x => { try { return Address.parse(x.address).equals(Address.parse(r.to!)); } catch { return false; } });
+    lines.push(`${verdict[0]} <b>${verdict[1]}</b>  ·  <b>${h(name)}</b> asks <b>${gram(BigInt(r.amount!))} GRAM</b>`, '');
+    lines.push(`To   ${c ? `<b>${h(c.name)}</b>  ` : ''}<a href="${VIEW(r.to!)}">${shortA(r.to!)}</a>${c ? '' : '  (new)'}`);
+    if (r.purpose) lines.push(`Says   <i>“${h(r.purpose)}”</i>`);
+  }
+  if (flags.length) lines.push('', ...flags.slice(0, 3).map(f => `⚠️ ${h(cap(f.text))}`));
+  if (result) lines.push('', `<b>→ ${h(result)}</b>`);
+  else lines.push('', '<i>Approve on your glasses. From here you can only say no.</i>');
+  const buttons = result ? undefined : [[{ text: '✕ Reject', data: `rej:${r.id}` }, ...(a && r.kind === 'pay' ? [{ text: `⏸ Pause ${name}`, data: `frz:${a.id}` }] : [])]];
+  return { html: lines.join('\n'), buttons };
+}
+function agentCard(a: Agent, kind: 'alarm' | 'killed' | 'paused' | 'resumed'): TgCard {
+  if (kind === 'alarm') {
+    const i = a.alarmInfo;
+    return {
+      html: [`🚨 <b>ALARM</b>  ·  <b>${h(a.name)}</b>`, '',
+        i ? `<b>${i.amount} GRAM</b> left its wallet with no approval.` : h(a.alarm ?? 'Something moved without your approval.'),
+        ...(i ? [`To   <a href="${VIEW(i.to)}">${shortA(i.to)}</a>`] : []), '',
+        '<i>Kill it from your glasses to revoke its key and pull the rest back. Pausing here stops new requests.</i>'].join('\n'),
+      buttons: [[{ text: `⏸ Pause ${a.name}`, data: `frz:${a.id}` }], [{ text: 'Its wallet on Tonviewer', url: VIEW(a.address) }]],
+    };
+  }
+  if (kind === 'killed') return { html: `■ <b>KILLED</b>  ·  <b>${h(a.name)}</b>\n\nIts key is revoked on chain and what it held is back in your vault.\n<a href="${VIEW(a.address)}">See it on Tonviewer</a>` };
+  return { html: kind === 'paused' ? `⏸ <b>PAUSED</b>  ·  <b>${h(a.name)}</b>\n\nIt can't ask for anything until you resume it. It can still lose what's already in its wallet; kill it from your glasses to pull that back.` : `▶️ <b>RESUMED</b>  ·  <b>${h(a.name)}</b>` };
+}
+
 startTelegram({
+  card(e) {
+    if (e.requestId) { const r = db.requests.find(x => x.id === e.requestId); if (r) return requestCard(r); }
+    const a = e.agentId ? agentOf(e.agentId) : undefined;
+    if (a && e.level === 'alarm' && /^ALARM/.test(e.text)) return agentCard(a, 'alarm');
+    if (/^KILLED /.test(e.text)) { const n = e.text.slice(7).split(':')[0]; const k = db.agents.find(x => x.name === n && x.status === 'revoked'); if (k) return agentCard(k, 'killed'); }
+    return null;
+  },
   reject(requestId) {
     const r = db.requests.find(x => x.id === requestId);
-    if (!r || r.status !== 'pending') return 'Already decided.';
+    if (!r || r.status !== 'pending') return { answer: 'Already decided.', card: r ? requestCard(r, r.status === 'rejected' ? 'Rejected' : 'Already decided') : undefined };
+    const card = requestCard(r, r.kind === 'create' ? 'Rejected. No wallet was created.' : 'Rejected. Nothing moved.');
     r.status = 'rejected'; r.decidedAt = Date.now(); r.note = 'rejected from Telegram';
     const name = agentOf(r.agentId)?.name ?? 'agent';
     if (r.kind === 'create') db.agents = db.agents.filter(x => x.id !== r.agentId);
-    log(`Rejected from Telegram: ${name}`, 'warn'); save();
-    return r.kind === 'create' ? `Rejected. ${name} gets no wallet.` : `Rejected. ${name} was not paid.`;
+    log(`Rejected from Telegram: ${name}`, 'info'); save();
+    return { answer: r.kind === 'create' ? `Rejected. ${name} gets no wallet.` : `Rejected. ${name} was not paid.`, card };
   },
   freeze(agentId, on) {
-    const a = agentOf(agentId); if (!a) return 'Unknown agent.';
+    const a = agentOf(agentId); if (!a) return { answer: 'Unknown agent.' };
     a.frozen = on;
     a.alarm = on ? 'Paused from Telegram. Kill it to pull its funds back.' : undefined;
     if (on) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent frozen'; }
-    log(on ? `PAUSED ${a.name} from Telegram: all its requests refused` : `Resumed ${a.name}`, on ? 'alarm' : 'info'); save();
-    return on ? `${a.name} is paused. It can only lose what is already in its wallet; kill it from your glasses to pull that back.` : `${a.name} resumed.`;
+    log(on ? `Paused ${a.name} from Telegram` : `Resumed ${a.name}`, 'info'); save();
+    return { answer: on ? `${a.name} is paused.` : `${a.name} resumed.`, card: agentCard(a, on ? 'paused' : 'resumed'), keepCard: true };
   },
   status() {
     const live = db.agents.filter(a => a.status === 'active');
     const pend = db.requests.filter(r => r.status === 'pending').length;
-    return `Vault ${db.vault ?? 'not set'}\nAgents: ${live.map(a => a.name + (a.frozen ? ' (frozen)' : '')).join(', ') || 'none'}\nWaiting for you: ${pend}`;
+    const rows = live.map(a => `${a.frozen ? '⏸' : '●'} <b>${h(a.name)}</b>   ${gram(spentToday(a.id))} of ${gram(limitsFor(a).daily)} GRAM today`);
+    return [`<b>Reins</b>  ·  vault <a href="${VIEW(db.vault!)}">${shortA(db.vault!)}</a>`, '',
+      rows.length ? rows.join('\n') : 'No agents yet. Connect one from the Reins phone page.', '',
+      pend ? `🟡 <b>${pend}</b> waiting for you on your glasses` : 'Nothing is waiting for you.'].join('\n');
   },
   agents: () => db.agents.filter(a => a.status === 'active').map(a => ({ id: a.id, name: a.name, frozen: !!a.frozen })),
 });
