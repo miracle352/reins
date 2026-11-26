@@ -17,14 +17,28 @@
         -webkit-text-size-adjust: 100%;
         overscroll-behavior: none;
       }
-      #app { padding: 20px; max-width: 520px; margin: 0 auto; }
-      h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 8px; color: #fff; }
-      section { border-top: 1px solid #3a3a3a; padding: 14px 0; }
-      .muted { color: #9a9a9a; } .err { color: #ff8a80; }
-      code { display: block; word-break: break-all; background: #1a1a1a; padding: 8px; border-radius: 6px; margin-bottom: 8px; }
+      #app { padding: 20px 18px 40px; max-width: 520px; margin: 0 auto; }
+      h1 { font-size: 26px; margin: 0 0 6px; color: #7dff9a; letter-spacing: -0.5px; }
+      h2 { font-size: 15px; margin: 0 0 8px; color: #fff; }
+      .lead { font-size: 17px; color: #fff; margin: 0 0 12px; }
+      section { border-top: 1px solid #333; padding: 16px 0; }
+      .muted { color: #9a9a9a; font-size: 13px; } .err { color: #ff8a80; }
+      .stats { display: flex; gap: 10px; margin: 14px 0 4px; }
+      .stats div { flex: 1; background: #1a1a1a; border-radius: 10px; padding: 10px; }
+      .stats b { display: block; font-size: 20px; color: #7dff9a; } .stats span { font-size: 12px; color: #9a9a9a; }
+      .row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+      .grow { flex: 1; min-width: 0; }
+      .tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #2b3b2e; color: #7dff9a; }
+      .tag.frozen { background: #3b352b; color: #ffcf7d; } .tag.awaiting_create { background: #2b2f3b; color: #9bb8ff; }
+      code { display: block; word-break: break-all; background: #1a1a1a; padding: 8px; border-radius: 6px; margin-top: 8px; font-size: 12px; }
+      code.inline { display: inline; padding: 2px 6px; }
       .words { font-family: ui-monospace, monospace; background: #1a1a1a; padding: 10px; border-radius: 6px; }
-      button { background: #3d3d3d; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; margin: 4px 4px 4px 0; font: inherit; }
-      input, textarea { width: 100%; box-sizing: border-box; background: #1a1a1a; color: #e5e5e5; border: 1px solid #3a3a3a; border-radius: 6px; padding: 8px; font: inherit; }
+      .log { margin: 4px 0; font-size: 13px; color: #c8c8c8; }
+      button, .button { display: inline-block; background: #333; color: #fff; border: 0; border-radius: 8px; padding: 9px 13px; margin: 4px 6px 4px 0; font: inherit; font-size: 14px; text-decoration: none; }
+      .primary { background: #2f7d46; }
+      input, textarea { box-sizing: border-box; background: #1a1a1a; color: #e5e5e5; border: 1px solid #3a3a3a; border-radius: 6px; padding: 8px; font: inherit; }
+      textarea, label input { width: 100%; } .budget { width: 64px; text-align: right; }
+      details { padding: 12px 0; } summary { color: #9a9a9a; }
     </style>
   </head>
   <body>

@@ -34,7 +34,7 @@ export function startTelegram(actions: Actions) {
     const icon = e.level === 'alarm' ? '🚨' : e.level === 'warn' ? '⚠️' : '🔔';
     const rows: { text: string; data: string }[][] = [];
     if (e.requestId) rows.push([{ text: '✕ Reject', data: `rej:${e.requestId}` }]);
-    if (e.agentId && e.level !== 'info') rows.push([{ text: '❄ Freeze agent', data: `frz:${e.agentId}` }]);
+    if (e.agentId && e.level !== 'info') rows.push([{ text: '⏸ Pause agent', data: `frz:${e.agentId}` }]);
     const tail = e.requestId ? '\n\nApprove on your glasses (money moves only from there).' : '';
     void send(`${icon} ${e.text}${tail}`, rows.length ? rows : undefined);
   });
@@ -59,16 +59,16 @@ export function startTelegram(actions: Actions) {
       if (db.telegramChat) return void tg('sendMessage', { chat_id: chat, text: 'This Reins is already linked to a chat.' });
       if (arg !== db.pairCode) return void tg('sendMessage', { chat_id: chat, text: 'Wrong code. It is shown on your glasses and on the Reins phone page.' });
       db.telegramChat = chat; db.pairCode = undefined; save();
-      return void send('Linked. You will get alerts here, and can Reject requests or Freeze an agent. Money only moves from your glasses.');
+      return void send('Linked. You will get alerts here, and can Reject requests or Pause an agent. Money only moves from your glasses.');
     }
     if (chat !== db.telegramChat) return void tg('sendMessage', { chat_id: chat, text: 'Send /pair <code> first.' });
     if (cmd === '/status' || cmd === '/start') return void send(actions.status());
-    if (cmd === '/freeze') {
+    if (cmd === '/pause' || cmd === '/freeze') {
       const list = actions.agents();
       if (!list.length) return void send('No live agents.');
-      return void send('Freeze which agent?', list.map(a => [{ text: `${a.frozen ? 'Unfreeze' : '❄ Freeze'} ${a.name}`, data: `${a.frozen ? 'unf' : 'frz'}:${a.id}` }]));
+      return void send('Pause which agent?', list.map(a => [{ text: `${a.frozen ? 'Resume' : '⏸ Pause'} ${a.name}`, data: `${a.frozen ? 'unf' : 'frz'}:${a.id}` }]));
     }
-    return void send('Commands: /status, /freeze');
+    return void send('Commands: /status, /pause');
   }
 
   async function onButton(q: any) {

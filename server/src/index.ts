@@ -145,6 +145,7 @@ route('GET', /^\/lens\/state$/, async () => {
       last: lastPayment(a.id),
     }))),
     spentToday: gram(db.agents.reduce((s, a) => s + spentToday(a.id), 0n)),
+    payees: db.contacts.map(c => ({ address: c.address, name: c.name, trusted: c.trusted, autoLimit: gram(BigInt(c.autoLimit)) })),
     alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
     ticker: db.events.slice(0, 8).map(e => e.text),
@@ -193,6 +194,24 @@ route('POST', /^\/lens\/pause$/, async b => {
   a.frozen = !!b.on;
   if (a.frozen) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent paused'; }
   log(a.frozen ? `Paused ${a.name}` : `Resumed ${a.name}`, 'info', { agentId: a.id }); save();
+  return { ok: true };
+});
+
+route('POST', /^\/lens\/budget$/, async b => {
+  const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
+  const daily = toNanoStr(String(b.daily));
+  if (daily <= 0n || daily > 1000_000_000_000n) throw new HttpError(400, 'Budget must be between 0 and 1000 GRAM.');
+  a.daily = daily.toString();
+  log(`${a.name}'s daily budget set to ${gram(daily)} GRAM`, 'info', { agentId: a.id }); save();
+  return { ok: true };
+});
+
+route('POST', /^\/lens\/payee$/, async b => {
+  const c = db.contacts.find(x => { try { return Address.parse(x.address).equals(Address.parse(String(b.address))); } catch { return false; } });
+  if (!c) throw new HttpError(404, 'unknown payee');
+  if (b.remove) db.contacts = db.contacts.filter(x => x !== c);
+  else { c.trusted = !!b.trusted; if (b.autoLimit !== undefined) c.autoLimit = toNanoStr(String(b.autoLimit)).toString(); }
+  log(b.remove ? `Removed payee ${c.name}` : `${c.name} is ${c.trusted ? 'trusted' : 'no longer trusted'}`); save();
   return { ok: true };
 });
 
@@ -282,8 +301,8 @@ startTelegram({
     a.frozen = on;
     a.alarm = on ? 'Paused from Telegram. Kill it to pull its funds back.' : undefined;
     if (on) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent frozen'; }
-    log(on ? `FROZEN ${a.name} from Telegram: all its requests refused` : `Unfroze ${a.name}`, on ? 'alarm' : 'info'); save();
-    return on ? `${a.name} is frozen. It can only lose its small buffer now; kill it from your glasses to pull that back.` : `${a.name} unfrozen.`;
+    log(on ? `PAUSED ${a.name} from Telegram: all its requests refused` : `Resumed ${a.name}`, on ? 'alarm' : 'info'); save();
+    return on ? `${a.name} is paused. It can only lose what is already in its wallet; kill it from your glasses to pull that back.` : `${a.name} resumed.`;
   },
   status() {
     const live = db.agents.filter(a => a.status === 'active');
