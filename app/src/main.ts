@@ -5,6 +5,7 @@ import {
 import { toNano } from '@ton/core';
 import { createAgentTx, fundTx, killTx } from '../../shared/vault.ts';
 import type { Intent } from '../../shared/intent.ts';
+import { signLogin } from '../../shared/auth.ts';
 import { loadVault, createVault, importVault, type Vault } from './vault.ts';
 import * as L from './lens.ts';
 import { mountPhone } from './phone.ts';
@@ -74,11 +75,25 @@ async function sendImages(p: L.Page, seq: number, onlyChanged: boolean) {
 }
 
 // ---------- server ----------
-async function api(method: string, path: string, body?: unknown) {
-  const r = await fetch(server + path, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+// The device logs in once by signing with the vault key; the server hands back a token for this device.
+const TOKEN_KEY = 'reins.token';
+let token = await store.get(TOKEN_KEY).catch(() => '');
+async function login() {
+  if (!vault) return;
+  const { ts, sig } = signLogin(vault.keys.secretKey, vault.address);
+  const j = await raw('POST', '/lens/login', { pub: vault.keys.publicKey.toString('hex'), ts, sig });
+  token = j.token; await store.set(TOKEN_KEY, token);
+}
+async function raw(method: string, path: string, body?: unknown) {
+  const r = await fetch(server + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error ?? `HTTP ${r.status}`), { status: r.status });
   return j;
+}
+async function api(method: string, path: string, body?: unknown) {
+  if (!token) await login();
+  try { return await raw(method, path, body); }
+  catch (e: any) { if (e.status !== 401 || !vault) throw e; await login(); return raw(method, path, body); }
 }
 const vaultSeqno = async (v: Vault) => (await api('GET', `/chain/wallet/${v.address}`)).seqno as number;
 
@@ -336,7 +351,7 @@ mountPhone({
   async create() { vault = await createVault(store); await hello(); return vault; },
   async import(words) { vault = await importVault(store, words); await hello(); return vault; },
 });
-async function hello() { if (vault) { await api('POST', '/lens/hello', { vault: vault.address }).catch(() => {}); await poll(); } }
+async function hello() { if (vault) { token = ''; await api('POST', '/lens/hello').catch(e => console.warn('hello', e.message)); await poll(); } }
 await render();
 setTimeout(() => void render(), 1900); // leave the splash
 await hello();

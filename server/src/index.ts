@@ -3,15 +3,17 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { Address } from '@ton/core';
 import { agentAddress, fmt, fmtUser, isLookalike } from '../../shared/ton.ts';
 import * as chain from './chain.ts';
-import { db, save, log, id, type Agent, type Req } from './store.ts';
+import { db, save, log, id, type Agent, type Req, type DB, withTenant, tenants, tenantFor, loadAll, flush, newToken, hashToken, newLinkCode,
+  tenantOfAgent, tenantOfToken, tenantOfLink, currentTenant } from './store.ts';
+import { verifyAgent, verifyLogin } from '../../shared/auth.ts';
+import { vaultWallet } from '../../shared/ton.ts';
 import { evaluate, DEFAULT_LIMITS, gram, toNanoStr, type Flag } from './policy.ts';
-import { startTelegram } from './telegram.ts';
+import { startTelegram, telegramWebhook, pairCodeFor } from './telegram.ts';
 import { transcribe, warmVoice } from './voice.ts';
 import { parseIntent } from '../../shared/intent.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const BUFFER = toNanoStr(process.env.REINS_BUFFER ?? '0.3');
-const TOKEN = process.env.REINS_TOKEN; // optional shared secret
 const DAY = 86_400_000;
 
 // --- small cache so the lens can poll every few seconds without hammering toncenter ---
@@ -57,17 +59,21 @@ function cardFor(r: Req) {
 
 // --- routes ---
 type H = (body: any, params: string[]) => Promise<any>;
-const routes: [string, RegExp, H][] = [];
-const route = (m: string, p: RegExp, h: H) => routes.push([m, p, h]);
+/** open: anyone. lens: the vault owner's device. agent: a signed call from one agent. link: a new agent with a link code. */
+type Scope = 'open' | 'lens' | 'agent' | 'link' | 'lens|agent';
+const routes: [string, RegExp, Scope, H][] = [];
+const route = (m: string, p: RegExp, scope: Scope, h: H) => routes.push([m, p, scope, h]);
+/** The agent that signed the current call (set by authorize, never by the client). */
+const caller = (b: any) => b[CALLER] as Agent;
+const CALLER = Symbol('caller');
 class HttpError extends Error { constructor(public code: number, msg: string) { super(msg); } }
 
 // Kit (the agent side)
-route('POST', /^\/kit\/agents$/, async b => {
-  if (!db.vault) throw new HttpError(409, 'Open Reins on your glasses first so it can create your vault.');
+route('POST', /^\/kit\/agents$/, 'link', async b => {
   const pub = BigInt('0x' + String(b.operatorPub));
   const existing = db.agents.find(a => a.operatorPub === b.operatorPub);
   if (existing) return { agentId: existing.id, address: existing.address, status: existing.status };
-  const { index, address } = agentAddress(Address.parse(db.vault), pub);
+  const { index, address } = agentAddress(Address.parse(db.vault!), pub);
   const agent: Agent = { id: id(), name: String(b.name ?? 'agent').slice(0, 20), operatorPub: b.operatorPub, address: fmt(address), index: index.toString(), status: 'awaiting_create', createdAt: Date.now() };
   // A second process using a live agent's name is either a lost key file or something posing as that agent.
   const twin = db.agents.find(a => a.status === 'active' && a.name.toLowerCase() === agent.name.toLowerCase());
@@ -78,15 +84,15 @@ route('POST', /^\/kit\/agents$/, async b => {
   return { agentId: agent.id, address: agent.address, status: agent.status };
 });
 
-route('GET', /^\/kit\/agents\/(\w+)$/, async (_b, [aid]) => {
-  const a = agentOf(aid); if (!a) throw new HttpError(404, 'unknown agent');
+route('GET', /^\/kit\/agents\/(\w+)$/, 'agent', async (_b, [aid]) => {
+  const a = agentOf(aid); if (!a || a !== caller(_b)) throw new HttpError(404, 'unknown agent');
   const st = await cached(`st:${a.address}`, 6000, () => chain.state(a.address));
   const seq = st === 'active' ? await cached(`seq:${a.address}`, 3000, () => chain.seqno(a.address)) : 0;
   return { ...a, chainState: st, balance: st === 'active' ? (await agentBal(a)).toString() : '0', seqno: seq };
 });
 
-route('POST', /^\/kit\/pay$/, async b => {
-  const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
+route('POST', /^\/kit\/pay$/, 'agent', async b => {
+  const a = caller(b);
   if (a.status === 'revoked') throw new HttpError(403, 'This agent was revoked by its owner.');
   if (a.frozen) throw new HttpError(403, 'This agent is frozen by its owner. Do not retry.');
   if (a.status !== 'active') throw new HttpError(409, 'Agent wallet not created yet. Approve it on your glasses.');
@@ -104,13 +110,13 @@ route('POST', /^\/kit\/pay$/, async b => {
   return r;
 });
 
-route('GET', /^\/kit\/requests\/(\w+)$/, async (_b, [rid]) => {
-  const r = db.requests.find(x => x.id === rid); if (!r) throw new HttpError(404, 'unknown request');
+route('GET', /^\/kit\/requests\/(\w+)$/, 'agent', async (_b, [rid]) => {
+  const r = db.requests.find(x => x.id === rid && x.agentId === caller(_b).id); if (!r) throw new HttpError(404, 'unknown request');
   return r;
 });
 
-route('POST', /^\/kit\/requests\/(\w+)\/result$/, async (b, [rid]) => {
-  const r = db.requests.find(x => x.id === rid); if (!r) throw new HttpError(404, 'unknown request');
+route('POST', /^\/kit\/requests\/(\w+)\/result$/, 'agent', async (b, [rid]) => {
+  const r = db.requests.find(x => x.id === rid && x.agentId === caller(b).id); if (!r) throw new HttpError(404, 'unknown request');
   soon();
   r.status = b.ok ? 'paid' : 'failed'; r.payTx = b.tx; r.note = b.note;
   const a = agentOf(r.agentId)!;
@@ -119,20 +125,35 @@ route('POST', /^\/kit\/requests\/(\w+)\/result$/, async (b, [rid]) => {
   save(); return r;
 });
 
-route('POST', /^\/chain\/send$/, async b => ({ hash: await chain.sendBoc(String(b.boc)) }));
-route('GET', /^\/chain\/wallet\/([\w-]+)$/, async (_b, [addr]) => {
+route('POST', /^\/chain\/send$/, 'lens|agent', async b => ({ hash: await chain.sendBoc(String(b.boc)) }));
+route('GET', /^\/chain\/wallet\/([\w-]+)$/, 'lens|agent', async (_b, [addr]) => {
   const st = await chain.state(addr);
   return { state: st, seqno: st === 'active' ? await chain.seqno(addr) : 0, balance: (await chain.balance(addr)).toString() };
 });
 
 // Lens (the glasses side)
-route('POST', /^\/lens\/hello$/, async b => {
-  const vault = fmtUser(Address.parse(String(b.vault)));
-  if (db.vault !== vault) { db.vault = vault; log(`Vault ready: ${vault.slice(0, 6)}…${vault.slice(-4)}`); save(); }
-  return { ok: true, buffer: BUFFER.toString(), pairCode: db.telegramChat ? null : db.pairCode };
+// Login: the device proves it holds the vault key by signing a timestamp, and gets a token for later calls.
+route('POST', /^\/lens\/login$/, 'open', async b => {
+  const pub = Buffer.from(String(b.pub ?? ''), 'hex');
+  if (pub.length !== 32) throw new HttpError(400, 'bad key');
+  const vault = fmtUser(vaultWallet(pub).address);
+  if (!verifyLogin(pub, vault, Number(b.ts), String(b.sig ?? ''))) throw new HttpError(401, 'Signature did not check out. Is your phone clock right?');
+  const fresh = !tenants.has(vault);
+  const t = tenantFor(vault);
+  const token = newToken();
+  t.lensTokens = [...(t.lensTokens ?? []).slice(-4), hashToken(token)]; // up to 5 devices
+  withTenant(t, () => { if (fresh) log(`Vault ready: ${vault.slice(0, 6)}…${vault.slice(-4)}`); save(); });
+  return { token, vault };
 });
 
-route('GET', /^\/lens\/state$/, async () => {
+route('POST', /^\/lens\/hello$/, 'lens', async () => {
+  const pairCode = pairCodeFor(currentTenant()!); save();
+  return { ok: true, vault: db.vault, buffer: BUFFER.toString(), pairCode, link: db.linkCode };
+});
+
+route('POST', /^\/lens\/link$/, 'lens', async () => { db.linkCode = newLinkCode(); log('New agent link code: agents with the old one can no longer ask'); save(); return { link: db.linkCode }; });
+
+route('GET', /^\/lens\/state$/, 'lens', async () => {
   const vaultBal = db.vault ? await cached('vault', 10_000, () => chain.balance(db.vault!)) : 0n;
   let atRisk = 0n;
   for (const a of db.agents.filter(a => a.status === 'active')) atRisk += await agentBal(a);
@@ -153,11 +174,12 @@ route('GET', /^\/lens\/state$/, async () => {
     alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address, ...(alarm.alarmInfo ?? {}) } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
     ticker: db.events.slice(0, 8).map(e => e.text),
-    telegram: db.telegramChat ? 'linked' : db.pairCode ?? null,
+    telegram: db.telegramChat ? 'linked' : pairCodeFor(currentTenant()!),
+    link: db.linkCode,
   };
 });
 
-route('POST', /^\/lens\/decide$/, async b => {
+route('POST', /^\/lens\/decide$/, 'lens', async b => {
   const r = db.requests.find(x => x.id === b.requestId);
   if (!r || r.status !== 'pending') throw new HttpError(409, 'Already decided.');
   const a = agentOf(r.agentId)!;
@@ -179,7 +201,7 @@ route('POST', /^\/lens\/decide$/, async b => {
   save(); return r;
 });
 
-route('POST', /^\/lens\/kill$/, async b => {
+route('POST', /^\/lens\/kill$/, 'lens', async b => {
   const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
   await chain.sendBoc(String(b.boc));
   a.status = 'revoked'; a.alarm = undefined; a.alarmInfo = undefined;
@@ -188,12 +210,12 @@ route('POST', /^\/lens\/kill$/, async b => {
   save(); return { ok: true };
 });
 
-route('POST', /^\/lens\/dismiss$/, async b => {
+route('POST', /^\/lens\/dismiss$/, 'lens', async b => {
   const a = agentOf(b.agentId); if (a) { a.alarm = undefined; a.alarmInfo = undefined; log(`Alarm on ${a.name} dismissed${a.frozen ? ' (still paused)' : ''}`); save(); }
   return { ok: true };
 });
 
-route('POST', /^\/lens\/pause$/, async b => {
+route('POST', /^\/lens\/pause$/, 'lens', async b => {
   const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
   a.frozen = !!b.on;
   if (a.frozen) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent paused'; }
@@ -201,7 +223,7 @@ route('POST', /^\/lens\/pause$/, async b => {
   return { ok: true };
 });
 
-route('POST', /^\/lens\/budget$/, async b => {
+route('POST', /^\/lens\/budget$/, 'lens', async b => {
   const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
   const daily = toNanoStr(String(b.daily));
   if (daily <= 0n || daily > 1000_000_000_000n) throw new HttpError(400, 'Budget must be between 0 and 1000 GRAM.');
@@ -210,7 +232,7 @@ route('POST', /^\/lens\/budget$/, async b => {
   return { ok: true };
 });
 
-route('POST', /^\/lens\/payee$/, async b => {
+route('POST', /^\/lens\/payee$/, 'lens', async b => {
   const c = db.contacts.find(x => { try { return Address.parse(x.address).equals(Address.parse(String(b.address))); } catch { return false; } });
   if (!c) throw new HttpError(404, 'unknown payee');
   if (b.remove) db.contacts = db.contacts.filter(x => x !== c);
@@ -219,7 +241,7 @@ route('POST', /^\/lens\/payee$/, async b => {
   return { ok: true };
 });
 
-route('POST', /^\/lens\/give$/, async b => {
+route('POST', /^\/lens\/give$/, 'lens', async b => {
   const a = agentOf(b.agentId); if (!a || a.status !== 'active') throw new HttpError(409, 'That agent is not live.');
   const amount = toNanoStr(String(b.amount));
   await chain.sendBoc(String(b.boc));
@@ -230,7 +252,7 @@ route('POST', /^\/lens\/give$/, async b => {
   return { ok: true, daily: gram(limitsFor(a).daily) };
 });
 
-route('POST', /^\/lens\/voice$/, async b => {
+route('POST', /^\/lens\/voice$/, 'lens', async b => {
   const text = await transcribe(String(b.pcm ?? ''));
   const intent = parseIntent(text, db.agents.filter(a => a.status === 'active').map(a => a.name));
   if (text) log(`Heard: "${text}"`, 'info');
@@ -241,10 +263,11 @@ route('POST', /^\/lens\/voice$/, async b => {
 let watching = false;
 async function watchdog() {
   if (watching) return; watching = true;
-  try { await watchOnce(); } finally { watching = false; }
+  try { for (const t of tenants.values()) await withTenant(t, watchOnce); } finally { watching = false; }
 }
 const soon = () => setTimeout(() => void watchdog(), 4000);
 async function watchOnce() {
+  if (!db.vault) return;
   for (const a of db.agents) {
     if (a.status === 'revoked') continue;
     try {
@@ -261,8 +284,8 @@ async function watchOnce() {
       for (const t of fresh.reverse()) {
         if (t.to === fmtUser(Address.parse(db.vault!))) continue; // sweep back to vault
         const match = db.requests.find(r => r.agentId === a.id && r.kind === 'pay' && ['approved', 'paid'].includes(r.status)
-          && !(r as any).matched && BigInt(r.amount!) === t.amount && Address.parse(r.to!).equals(Address.parse(t.to)));
-        if (match) { (match as any).matched = t.hash; continue; }
+          && !r.matched && BigInt(r.amount!) === t.amount && Address.parse(r.to!).equals(Address.parse(t.to)));
+        if (match) { match.matched = t.hash; continue; }
         a.alarm = `${gram(t.amount)} GRAM left to ${t.to.slice(2, 6)}…${t.to.slice(-4)} with no approval`;
         a.alarmInfo = { amount: gram(t.amount), to: t.to };
         log(`ALARM ${a.name}: ${a.alarm}`, 'alarm', { agentId: a.id });
@@ -274,22 +297,58 @@ async function watchOnce() {
 setInterval(watchdog, Number(process.env.WATCH_MS ?? 15000));
 
 // --- http plumbing ---
+const BODY_MAX = 2_000_000; // voice clips are the largest bodies
 createServer(async (req: IncomingMessage, res: ServerResponse) => {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-headers', 'content-type, authorization');
+  res.setHeader('access-control-allow-headers', 'content-type, authorization, x-reins-agent, x-reins-sig');
   if (req.method === 'OPTIONS') { res.writeHead(204).end(); return; }
   const send = (code: number, v: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(v, (_k, x) => typeof x === 'bigint' ? x.toString() : x)); };
-  if (TOKEN && req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: 'unauthorized' });
   const path = (req.url ?? '/').split('?')[0];
-  for (const [m, p, h] of routes) {
+  let raw = '';
+  for await (const c of req) { raw += c; if (raw.length > BODY_MAX) return send(413, { error: 'too large' }); }
+  if (path === '/health' || path === '/') return send(200, { ok: true, service: 'reins', vaults: tenants.size, uptime: Math.round(process.uptime()) });
+  if (path.startsWith('/tg/') && req.method === 'POST') { await telegramWebhook(path.slice(4), raw).catch(e => console.error('tg', e.message)); return send(200, {}); }
+  for (const [m, p, scope, h] of routes) {
     const match = req.method === m && path.match(p);
     if (!match) continue;
-    let raw = ''; for await (const c of req) raw += c;
-    try { return send(200, await h(raw ? JSON.parse(raw) : {}, match.slice(1))); }
-    catch (e: any) { return send(e instanceof HttpError ? e.code : 500, { error: e.message }); }
+    try {
+      const body = raw ? JSON.parse(raw) : {};
+      const tenant = authorize(scope, req, path, raw, body);
+      const run = () => h(body, match.slice(1));
+      return send(200, tenant ? await withTenant(tenant, run) : await run());
+    } catch (e: any) { return send(e instanceof HttpError ? e.code : 500, { error: e.message }); }
   }
   send(404, { error: 'not found' });
 }).listen(PORT, () => console.log(`reins server on :${PORT}`));
+
+function authorize(scope: Scope, req: IncomingMessage, path: string, raw: string, body: any): DB | undefined {
+  if (scope === 'open') return;
+  const bearer = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+  if (scope.includes('lens') && bearer) {
+    const t = tenantOfToken(bearer); if (t) return t;
+    if (scope === 'lens') throw new HttpError(401, 'This device is not logged in to that vault.');
+  }
+  const sig = req.headers['x-reins-sig'] as string | undefined;
+  if (scope === 'link') {
+    const t = tenantOfLink(String(body.link ?? ''));
+    if (!t) throw new HttpError(403, 'Unknown link code. It is shown in Reins on your phone, under "Connect an agent".');
+    if (!/^[0-9a-f]{64}$/.test(String(body.operatorPub)) || !verifyAgent(body.operatorPub, sig, req.method!, path, raw)) throw new HttpError(401, 'bad signature');
+    return t;
+  }
+  if (scope.includes('agent')) {
+    const aid = String(req.headers['x-reins-agent'] ?? '');
+    const t = aid ? tenantOfAgent(aid) : undefined;
+    const a = t?.agents.find(x => x.id === aid);
+    if (!t || !a || !verifyAgent(a.operatorPub, sig, req.method!, path, raw)) throw new HttpError(401, 'Unknown agent or bad signature.');
+    body[CALLER] = a;
+    return t;
+  }
+  throw new HttpError(401, 'Not logged in.');
+}
+
+await loadAll();
+setInterval(() => void flush(), 30_000);
+for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => void flush().then(() => process.exit(0)));
 
 void warmVoice().then(() => console.log('voice: ready (local Whisper)')).catch(e => console.error('voice: off', e.message));
 

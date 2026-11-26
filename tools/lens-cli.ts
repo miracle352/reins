@@ -4,18 +4,24 @@ import { readFileSync } from 'node:fs';
 import { mnemonicToPrivateKey } from '@ton/crypto';
 import { vaultWallet, fmtUser } from '../shared/ton.ts';
 import { createAgentTx, fundTx, killTx } from '../shared/vault.ts';
+import { signLogin } from '../shared/auth.ts';
 
 const S = process.env.REINS_SERVER ?? 'http://localhost:8787';
 const mnemonic: string[] = JSON.parse(readFileSync(process.env.VAULT_FILE ?? '../reins-spike/state.json', 'utf8')).vaultMnemonic;
 const keys = await mnemonicToPrivateKey(mnemonic);
 const vault = fmtUser(vaultWallet(keys.publicKey).address);
+let token = '';
 const call = async (m: string, p: string, b?: unknown) => {
-  const r = await fetch(S + p, { method: m, headers: { 'content-type': 'application/json' }, body: b ? JSON.stringify(b) : undefined });
+  if (!token && p !== '/lens/login') {
+    const { ts, sig } = signLogin(keys.secretKey, vault);
+    token = (await call('POST', '/lens/login', { pub: keys.publicKey.toString('hex'), ts, sig })).token;
+  }
+  const r = await fetch(S + p, { method: m, headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: b ? JSON.stringify(b) : undefined });
   const j = await r.json(); if (!r.ok) throw new Error(JSON.stringify(j)); return j;
 };
 
 const [cmd, arg] = process.argv.slice(2);
-if (cmd === 'hello') console.log(await call('POST', '/lens/hello', { vault }));
+if (cmd === 'hello') console.log(await call('POST', '/lens/hello'));
 const st = await call('GET', '/lens/state');
 if (cmd === 'state' || cmd === 'hello') console.log(JSON.stringify(st, null, 2));
 const card = st.pending;
