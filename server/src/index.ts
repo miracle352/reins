@@ -133,8 +133,7 @@ route('GET', /^\/lens\/state$/, async () => {
   let atRisk = 0n;
   for (const a of db.agents.filter(a => a.status === 'active')) atRisk += await agentBal(a);
   const pending = db.requests.filter(r => r.status === 'pending').sort((x, y) => x.createdAt - y.createdAt);
-  const alarmAgent = db.agents.find(a => a.status === 'active' && (a.alarm || a.frozen));
-  const alarm = alarmAgent ? { ...alarmAgent, alarm: alarmAgent.alarm ?? 'Frozen from Telegram. Its buffer is still in its wallet.' } : undefined;
+  const alarm = db.agents.find(a => a.status === 'active' && a.alarm);
   return {
     vault: db.vault, vaultBalance: gram(vaultBal), atRisk: gram(atRisk),
     agents: await Promise.all(db.agents.filter(a => a.status !== 'revoked' || Date.now() - a.createdAt < DAY).map(async a => ({
@@ -185,7 +184,7 @@ route('POST', /^\/lens\/kill$/, async b => {
 });
 
 route('POST', /^\/lens\/dismiss$/, async b => {
-  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; a.frozen = false; log(`Alarm on ${a.name} dismissed`); save(); }
+  const a = agentOf(b.agentId); if (a) { a.alarm = undefined; log(`Alarm on ${a.name} dismissed${a.frozen ? ' (still paused)' : ''}`); save(); }
   return { ok: true };
 });
 
@@ -281,6 +280,7 @@ startTelegram({
   freeze(agentId, on) {
     const a = agentOf(agentId); if (!a) return 'Unknown agent.';
     a.frozen = on;
+    a.alarm = on ? 'Paused from Telegram. Kill it to pull its funds back.' : undefined;
     if (on) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent frozen'; }
     log(on ? `FROZEN ${a.name} from Telegram: all its requests refused` : `Unfroze ${a.name}`, on ? 'alarm' : 'info'); save();
     return on ? `${a.name} is frozen. It can only lose its small buffer now; kill it from your glasses to pull that back.` : `${a.name} unfrozen.`;
