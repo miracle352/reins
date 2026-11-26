@@ -79,7 +79,7 @@ route('POST', /^\/kit\/pay$/, async b => {
   db.requests.push(r);
   log(v.auto
     ? `Auto-approved ${gram(amount)} → ${v.contact!.name} (${a.name})`
-    : `${a.name} asks ${gram(amount)} GRAM${v.flags.length ? ' ⚠ ' + v.flags.map(f => f.text).join(', ') : ''}`, v.flags.length ? 'warn' : 'info', { agentId: a.id, requestId: v.auto ? undefined : r.id });
+    : `${a.name} asks ${gram(amount)} GRAM${v.flags.length ? ' !! ' + v.flags.map(f => f.text).join(', ') : ''}`, v.flags.length ? 'warn' : 'info', { agentId: a.id, requestId: v.auto ? undefined : r.id });
   save();
   return r;
 });
