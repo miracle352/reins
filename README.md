@@ -9,9 +9,11 @@ Reins is an Even G2 app that lets you approve, refuse and kill the AI agents tha
 Built for *Heads Up: Even Realities Hackathon* (TVM Ventures × Daos Hub).
 Main track: **AI Assistants & Work** (OpenRouter, Claude via MCP). Second track: **Crypto & DeFi** (TON, Gram Wallet). Also entered for **Best Telegram integration**.
 
-| Agent asks for a wallet | Agent asks to pay someone new | A hijacked agent spends on its own | One tap later |
+| A request you can trust | A poisoned one: *this ≠ known* | A hijacked key | One tap later |
 |---|---|---|---|
-| ![create](docs/lens_create.png) | ![pay](docs/lens_pay.png) | ![alarm](docs/lens_alarm.png) | ![killed](docs/lens_killed.png) |
+| ![clean](docs/lens_clean.png) | ![lookalike](docs/lens_lookalike.png) | ![alarm](docs/lens_hijack_alarm.png) | ![killed](docs/lens_killed_result.png) |
+| **Home** | **An agent** | **A new agent** | **Voice** |
+| ![home](docs/lens_home.png) | ![agent](docs/lens_agent.png) | ![new](docs/lens_new_agent.png) | ![listen](docs/lens_listening.png) |
 
 These are captures of the real app in the Even Hub simulator, driving real TON testnet transactions.
 
@@ -35,8 +37,10 @@ So today the owner either over-funds the agent and hopes, or babysits a web dash
 4. **Watchdog.** Every outgoing transfer from every agent wallet is matched against what you or your rules approved. Anything else raises an alarm on your lens.
 5. **Kill switch.** One tap revokes the agent's key on chain and pulls its remaining balance back to your vault, in a single transaction.
 6. **Hands-free.** When a request lands, Reins listens for a few seconds: "approve", "reject", "why", "kill it". From the home screen: "give trip-bot one more", "pause shop-bot". Speech is transcribed by a Whisper model on your own Reins server, so your voice never goes to a third party. Voice can only approve clean requests; anything flagged needs a tap.
-7. **A home screen worth a glance.** Every agent with today's spend against its daily budget and its last payment. Open one to pause it, give it more for today, or kill it.
-8. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
+7. **Address fingerprints.** Every address gets a small pattern drawn from its hash. When a payment goes to a lookalike of someone you trust, the card shows both patterns side by side, *this ≠ known*. Attackers can copy the characters people glance at; they cannot copy the pattern.
+8. **Big type where it matters.** The amount on every request, and every result (SENT, REJECTED, KILLED), is drawn large on an image layer, something the firmware font cannot do.
+9. **A home screen worth a glance.** Every agent with today's spend against its daily budget and its last payment. Open one to pause it, give it more for today, or kill it.
+10. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
 
 It uses TON's agentic wallet contract **unchanged**, so any agent built on the standard can use it.
 
