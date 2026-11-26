@@ -8,7 +8,7 @@ import { db, save, log, id, type Agent, type Req, type DB, withTenant, tenants, 
 import { verifyAgent, verifyLogin } from '../../shared/auth.ts';
 import { vaultWallet } from '../../shared/ton.ts';
 import { evaluate, DEFAULT_LIMITS, gram, toNanoStr, type Flag } from './policy.ts';
-import { startTelegram, telegramWebhook, pairCodeFor } from './telegram.ts';
+import { startTelegram, telegramWebhook, pairCodeFor, botName } from './telegram.ts';
 import { transcribe, warmVoice } from './voice.ts';
 import { parseIntent } from '../../shared/intent.ts';
 
@@ -174,6 +174,8 @@ route('GET', /^\/lens\/state$/, 'lens', async () => {
     alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address, ...(alarm.alarmInfo ?? {}) } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
     ticker: db.events.slice(0, 8).map(e => e.text),
+    events: db.events.slice(0, 30).map(e => ({ t: e.t, text: e.text, level: e.level })),
+    telegramBot: botName || null,
     telegram: db.telegramChat ? 'linked' : pairCodeFor(currentTenant()!),
     link: db.linkCode,
   };
@@ -236,8 +238,12 @@ route('POST', /^\/lens\/payee$/, 'lens', async b => {
   const c = db.contacts.find(x => { try { return Address.parse(x.address).equals(Address.parse(String(b.address))); } catch { return false; } });
   if (!c) throw new HttpError(404, 'unknown payee');
   if (b.remove) db.contacts = db.contacts.filter(x => x !== c);
-  else { c.trusted = !!b.trusted; if (b.autoLimit !== undefined) c.autoLimit = toNanoStr(String(b.autoLimit)).toString(); }
-  log(b.remove ? `Removed payee ${c.name}` : `${c.name} is ${c.trusted ? 'trusted' : 'no longer trusted'}`); save();
+  else {
+    if (b.trusted !== undefined) c.trusted = !!b.trusted;
+    if (b.autoLimit !== undefined) c.autoLimit = toNanoStr(String(b.autoLimit)).toString();
+    if (b.name) c.name = String(b.name).trim().slice(0, 24) || c.name;
+  }
+  log(b.remove ? `Removed payee ${c.name}` : b.name ? `Payee renamed to ${c.name}` : `${c.name} is ${c.trusted ? 'trusted' : 'no longer trusted'}`); save();
   return { ok: true };
 });
 

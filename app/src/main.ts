@@ -348,7 +348,7 @@ bridge.onEvenHubEvent(event => {
 // ---------- boot ----------
 vault = await loadVault(store);
 mountPhone({
-  getVault: () => vault, getServer: () => server, getState: () => state,
+  getVault: () => vault, getServer: () => server, getState: () => state as any, api,
   async setServer(url) { server = url.replace(/\/$/, ''); await store.set(SERVER_KEY, server); await hello(); },
   async create() { vault = await createVault(store); await hello(); return vault; },
   async import(words) { vault = await importVault(store, words); await hello(); return vault; },
@@ -364,6 +364,10 @@ async function galleryNext(step = 1) {
   await show('gallery:' + name, page);
 }
 async function hello() { if (vault) { token = ''; await api('POST', '/lens/hello').catch(e => console.warn('hello', e.message)); await poll(); } }
+// Dev: /?pagetour scrolls the phone page in steps so each part can be captured.
+if (import.meta.env.DEV && new URLSearchParams(location.search).has('pagetour')) {
+  let y = 0; setInterval(() => { y = y + 640 > document.body.scrollHeight ? 0 : y + 640; scrollTo(0, y); }, 4000);
+}
 if (galleryMode) await galleryNext(0);
 else {
   await render();

@@ -30,6 +30,7 @@ const sendTo = (chat: number, text: string, buttons?: Btn[][]) =>
     .catch(e => console.error(e.message));
 
 let actions: Actions;
+export let botName = process.env.TELEGRAM_BOT_NAME ?? '';
 
 /** Pair code for this vault's Telegram link (made on demand). */
 export function pairCodeFor(t: DB) {
@@ -40,6 +41,7 @@ export function pairCodeFor(t: DB) {
 export function startTelegram(a: Actions) {
   actions = a;
   if (!TOKEN) { console.log('telegram: off (no TELEGRAM_BOT_TOKEN)'); return; }
+  void tg('getMe', {}).then(me => { botName = me.username; }).catch(() => {});
 
   onEvent((e: Event, t: DB) => {
     if (!t.telegramChat) return;
