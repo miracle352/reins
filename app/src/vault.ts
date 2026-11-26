@@ -15,7 +15,8 @@ async function fromWords(words: string[]): Promise<Vault> {
 
 export async function loadVault(store: Storage): Promise<Vault | null> {
   let raw = await store.get(KEY).catch(() => '');
-  const dev = import.meta.env.VITE_DEV_VAULT_WORDS as string | undefined; // local testing only, never shipped
+  // Local testing only: lives in .env.development.local, which Vite never loads for builds.
+  const dev = import.meta.env.DEV ? (import.meta.env.VITE_DEV_VAULT_WORDS as string | undefined) : undefined;
   if (!raw && dev) { raw = dev; await store.set(KEY, dev); }
   if (!raw) return null;
   return fromWords(raw.trim().split(/\s+/));

@@ -5,3 +5,4 @@ dist/
 state.json
 .reins/
 .env.local
+.env.*.local
