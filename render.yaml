@@ -1,0 +1,23 @@
+# One-click deploy of the Reins server on Render's free plan.
+# Data lives in Postgres (DATABASE_URL, e.g. a free Neon database), so restarts lose nothing.
+services:
+  - type: web
+    name: reins
+    runtime: node
+    plan: free
+    buildCommand: npm ci --workspaces=false
+    startCommand: npm run server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TONCENTER_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

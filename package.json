@@ -18,12 +18,15 @@
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^16.3.0",
     "pg": "^8.23.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "tsx": "^4.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.20.0",
     "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

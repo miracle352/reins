@@ -1,0 +1,11 @@
+# Render's free plan sleeps after 15 idle minutes. The watchdog has to keep looking at agent wallets,
+# so ping the server every 10 minutes.
+name: keep the server awake
+on:
+  schedule: [{ cron: '*/10 * * * *' }]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 "${{ vars.REINS_URL }}/health"

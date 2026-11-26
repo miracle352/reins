@@ -356,7 +356,7 @@ await loadAll();
 setInterval(() => void flush(), 30_000);
 for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => void flush().then(() => process.exit(0)));
 
-void warmVoice().then(() => console.log('voice: ready (local Whisper)')).catch(e => console.error('voice: off', e.message));
+void warmVoice().then(how => console.log(`voice: ready (${how})`)).catch(e => console.error('voice: off', e.message));
 
 startTelegram({
   reject(requestId) {
