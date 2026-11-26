@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { ReinsAgent } from '../kit/src/lib.ts';
 
 const KEY = process.env.OPENROUTER_API_KEY;
-const MODELS = (process.env.OPENROUTER_MODELS ?? 'nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free').split(',');
+const MODELS = (process.env.OPENROUTER_MODELS ?? 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-super-vl:free,google/gemma-4-31b-it:free').split(',');
 const cfg = JSON.parse(readFileSync(new URL('./scenario.json', import.meta.url), 'utf8')) as {
   merchants: Record<string, string>; invoices: Record<string, string>; task: string;
 };
