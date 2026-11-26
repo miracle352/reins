@@ -4,3 +4,4 @@ dist/
 .env
 state.json
 .reins/
+.env.local

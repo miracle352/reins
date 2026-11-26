@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-    <title>Even Hub Minimal</title>
+    <title>Reins</title>
     <style>
       html, body {
         margin: 0;
@@ -17,19 +17,18 @@
         -webkit-text-size-adjust: 100%;
         overscroll-behavior: none;
       }
-      #app {
-        display: flex;
-        height: 100%;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        box-sizing: border-box;
-        text-align: center;
-      }
+      #app { padding: 20px; max-width: 520px; margin: 0 auto; }
+      h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 8px; color: #fff; }
+      section { border-top: 1px solid #3a3a3a; padding: 14px 0; }
+      .muted { color: #9a9a9a; } .err { color: #ff8a80; }
+      code { display: block; word-break: break-all; background: #1a1a1a; padding: 8px; border-radius: 6px; margin-bottom: 8px; }
+      .words { font-family: ui-monospace, monospace; background: #1a1a1a; padding: 10px; border-radius: 6px; }
+      button { background: #3d3d3d; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; margin: 4px 4px 4px 0; font: inherit; }
+      input, textarea { width: 100%; box-sizing: border-box; background: #1a1a1a; color: #e5e5e5; border: 1px solid #3a3a3a; border-radius: 6px; padding: 8px; font: inherit; }
     </style>
   </head>
   <body>
-    <div id="app">Companion app is running. Check the glasses display.</div>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,11 +1,17 @@
 {
-  "package_id": "com.example.evenhubminimal",
+  "package_id": "io.github.miracle352.reins",
   "edition": "202601",
-  "name": "Even Hub Minimal",
+  "name": "Reins",
   "version": "0.1.0",
   "min_app_version": "2.0.0",
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",
-  "permissions": [],
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Talks to your Reins server, which relays agent requests and reads the TON testnet.",
+      "whitelist": ["http://localhost:8787", "http://127.0.0.1:8787"]
+    }
+  ],
   "supported_languages": ["en"]
 }

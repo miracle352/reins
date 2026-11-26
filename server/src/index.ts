@@ -61,7 +61,8 @@ route('POST', /^\/kit\/agents$/, async b => {
 route('GET', /^\/kit\/agents\/(\w+)$/, async (_b, [aid]) => {
   const a = agentOf(aid); if (!a) throw new HttpError(404, 'unknown agent');
   const st = await cached(`st:${a.address}`, 6000, () => chain.state(a.address));
-  return { ...a, chainState: st, balance: st === 'active' ? (await agentBal(a)).toString() : '0', seqno: st === 'active' ? await chain.seqno(a.address) : 0 };
+  const seq = st === 'active' ? await cached(`seq:${a.address}`, 3000, () => chain.seqno(a.address)) : 0;
+  return { ...a, chainState: st, balance: st === 'active' ? (await agentBal(a)).toString() : '0', seqno: seq };
 });
 
 route('POST', /^\/kit\/pay$/, async b => {
@@ -89,6 +90,7 @@ route('GET', /^\/kit\/requests\/(\w+)$/, async (_b, [rid]) => {
 
 route('POST', /^\/kit\/requests\/(\w+)\/result$/, async (b, [rid]) => {
   const r = db.requests.find(x => x.id === rid); if (!r) throw new HttpError(404, 'unknown request');
+  soon();
   r.status = b.ok ? 'paid' : 'failed'; r.payTx = b.tx; r.note = b.note;
   const a = agentOf(r.agentId)!;
   cache.delete(`bal:${a.address}`);
@@ -142,6 +144,7 @@ route('POST', /^\/lens\/decide$/, async b => {
   if (b.action === 'trust' && r.to && !db.contacts.some(c => c.address === r.to)) {
     db.contacts.push({ address: r.to, name: String(b.name ?? `contact ${r.to.slice(-4)}`), trusted: true, autoLimit: r.amount! });
   }
+  soon(); setTimeout(() => void watchdog(), 12000);
   log(r.kind === 'create' ? `Created wallet for ${a.name} (${gram(BUFFER)} buffer)` : `Funded ${a.name} ${gram(BigInt(r.amount!))} GRAM`);
   save(); return r;
 });
@@ -161,8 +164,15 @@ route('POST', /^\/lens\/dismiss$/, async b => {
 });
 
 // --- watchdog: every outgoing transfer must match something you or your rules approved ---
+let watching = false;
 async function watchdog() {
+  if (watching) return; watching = true;
+  try { await watchOnce(); } finally { watching = false; }
+}
+const soon = () => setTimeout(() => void watchdog(), 4000);
+async function watchOnce() {
   for (const a of db.agents) {
+    if (a.status === 'revoked') continue;
     try {
       if (a.status === 'awaiting_create') {
         const approved = db.requests.find(r => r.agentId === a.id && r.kind === 'create' && r.status === 'approved');
