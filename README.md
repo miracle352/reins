@@ -2,10 +2,12 @@
 
 **Your agents spend. You hold the reins.**
 
-Reins is an Even G2 app that lets you approve, refuse and kill the AI agents that spend money for you on TON. Your agent asks for money and the request shows up on your glasses. You swipe and tap. Only the amount you approved ever reaches the agent's wallet.
+Reins is an Even G2 app that lets you approve, refuse and kill the AI agents that spend money for you on TON. Your agent asks for money and the request shows up on your glasses. Say "approve", or tap. Only the amount you approved ever reaches the agent's wallet.
+
+**The moment it's for:** you're at dinner, walking, in a meeting. Your agent (OpenClaw, Hermes, Claude, anything) hits a payment. Today it either stalls until you pull out your phone, or it spends without asking. With Reins it's a two-second glance, and the agent keeps working.
 
 Built for *Heads Up: Even Realities Hackathon* (TVM Ventures × Daos Hub).
-Main track: **Crypto & DeFi** (Gram Wallet / TON). Second track: **AI Assistants & Work** (OpenRouter, Claude via MCP). Also entered for **Best Telegram integration**.
+Main track: **AI Assistants & Work** (OpenRouter, Claude via MCP). Second track: **Crypto & DeFi** (TON, Gram Wallet). Also entered for **Best Telegram integration**.
 
 | Agent asks for a wallet | Agent asks to pay someone new | A hijacked agent spends on its own | One tap later |
 |---|---|---|---|
@@ -32,7 +34,9 @@ So today the owner either over-funds the agent and hopes, or babysits a web dash
 3. **Checks in plain code, not AI.** Reins flags new payees, lookalike addresses (address poisoning), amounts that don't match what the agent said, and limit breaches. No model decides whether money moves.
 4. **Watchdog.** Every outgoing transfer from every agent wallet is matched against what you or your rules approved. Anything else raises an alarm on your lens.
 5. **Kill switch.** One tap revokes the agent's key on chain and pulls its remaining balance back to your vault, in a single transaction.
-6. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
+6. **Hands-free.** When a request lands, Reins listens for a few seconds: "approve", "reject", "why", "kill it". From the home screen: "give trip-bot one more", "pause shop-bot". Speech is transcribed by a Whisper model on your own Reins server, so your voice never goes to a third party. Voice can only approve clean requests; anything flagged needs a tap.
+7. **A home screen worth a glance.** Every agent with today's spend against its daily budget and its last payment. Open one to pause it, give it more for today, or kill it.
+8. **Telegram, without your account.** A bot (bot token only, never your Telegram login) sends alerts and lets you Reject a request or Freeze an agent when the glasses app is closed. It cannot move money: that only happens from your glasses.
 
 It uses TON's agentic wallet contract **unchanged**, so any agent built on the standard can use it.
 
@@ -67,7 +71,9 @@ After each kill, `get_public_key` on the agent wallet returns `0`, its balance i
 
 ### Design choices worth noting
 
-- **Reject is always the first item in the list.** The SDK drops zero values, so a tap on item 0 arrives with no index. Putting Reject there means any ambiguous or malformed tap refuses instead of paying. On an alarm, Kill is first for the same reason.
+- **Smart defaults, safe where it matters.** A clean request to a payee you know opens with Approve selected: one tap. A flagged request opens with Reject first. The SDK drops zero values, so a tap on item 0 arrives with no index; putting Reject there means an ambiguous tap on a risky request refuses instead of paying. On an alarm, Kill is first.
+- **Voice never approves a flagged payment.** Saying "approve" on a lookalike or mismatched request gets "This one is flagged. Tap to approve it." Kill and "give" always ask for a confirm, by voice or tap.
+- **The speech model only transcribes.** Turning words into commands is plain code (`shared/intent.ts`), including sound-alike agent names: Whisper heard "tour bot" as "Turbah", and Reins still knew which agent you meant.
 - **Double-tap always exits**, as Even's template requires. Nothing in Reins uses it.
 - **Agent payments must use the `IGNORE_ERRORS` send mode.** The agentic wallet rejects anything else with exit code 137. We hit this in the first test; anyone building on the standard will.
 - **The watchdog reads with toncenter v2.** The v3 indexer on testnet returned empty transaction lists for wallets that clearly had them, which would have made the watchdog blind.
