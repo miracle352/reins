@@ -118,10 +118,10 @@ const agentById = (id: string) => state?.agents.find(a => a.id === id);
 /** What is on the lens. Alarms and requests interrupt browsing, never a confirm you started. */
 function current(): { key: string; page: L.Page } {
   if (Date.now() < splashUntil) return { key: 'splash', page: L.splashPage('Your agents spend. You hold the reins.') };
-  if (!vault) return { key: 'setup', page: L.note('REINS\n\nOpen Reins on your phone to create\nor import your vault.') };
+  if (!vault) return { key: 'setup', page: L.hello('HELLO', 'Open Reins on your phone\nto create your vault.') };
   if (overlay && Date.now() < overlay.until) return { key: overlay.key, page: overlay.page };
   if (listen) return { key: 'listen', page: L.listening(listen.hint, listen.level) };
-  if (!state) return { key: 'loading', page: L.note('REINS\n\nConnecting to your Reins server…') };
+  if (!state) return { key: 'loading', page: L.hello('REINS', 'Reaching your Reins server…') };
   if (view.t === 'confirmKill') return { key: 'ck:' + view.agentId, page: L.confirmKill(view.name, agentById(view.agentId)?.balance ?? '0') };
   if (view.t === 'confirmGive') { const a = agentById(view.agentId); if (a) return { key: 'cg:' + view.agentId, page: L.confirmGive(a, view.amount) }; }
   if (state.alarm) return { key: 'alarm:' + state.alarm.agentId + state.alarm.text, page: L.alarm(state.alarm, state.atRisk) };
@@ -147,7 +147,7 @@ async function render() {
 async function poll() {
   if (!vault) return;
   try { state = await api('GET', '/lens/state'); }
-  catch (e) { state = null; showNote(`Server unreachable\n${server}\n${(e as Error).message}`, 3000); return; }
+  catch (e) { state = null; showNote(`Can't reach your Reins server yet.\nRetrying…\n\n${(e as Error).message}`, 3000); return; }
   if (!busy) await render();
 }
 

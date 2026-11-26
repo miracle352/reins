@@ -51,8 +51,9 @@ export function home(s: State): Page {
   const agents = live(s);
   const working = agents.filter(a => a.status === 'active').length;
   const paused = agents.length - working;
-  const word = !agents.length ? 'NO AGENTS' : paused ? `${paused} PAUSED` : 'ALL CLEAR';
-  const sub = !agents.length ? 'Connect one from your phone' : `${working} working · ${s.atRisk} GRAM out`;
+  const empty = num(s.vaultBalance) < 0.05 && !agents.length;
+  const word = empty ? 'TOP UP' : !agents.length ? 'NO AGENTS' : paused ? `${paused} PAUSED` : 'ALL CLEAR';
+  const sub = empty ? 'Add GRAM to your vault from your phone' : !agents.length ? 'Connect one from your phone' : `${working} working · ${s.atRisk} GRAM out`;
   const budget = agents.reduce((t, a) => t + num(a.daily), 0);
   const items: string[] = [], actions: Action[] = [];
   for (const a of agents) {
@@ -183,6 +184,11 @@ export const result = (headline: string, detail: string): Page => ({
   images: [{ x: 144, y: 60, w: A.W, h: A.H, key: `res:${headline}:${detail}`, draw: () => A.headlineTile(headline, detail, headline === 'KILLED') }],
 });
 export const note = (text: string): Page => ({ texts: [full(text)] });
+/** Big centered word for the moments before there is anything to show. */
+export const hello = (word: string, detail: string): Page => ({
+  texts: [catcher],
+  images: [{ x: 144, y: 60, w: A.W, h: A.H, key: `hello:${word}:${detail}`, draw: () => A.headlineTile(word, detail) }],
+});
 export const listening = (hint: string, level: number): Page => ({
   texts: [{ x: 0, y: 0, w: 576, h: 40, content: '≈ Listening' },
           { x: 0, y: 44, w: 576, h: 40, content: bar(String(level), '1', 20) },

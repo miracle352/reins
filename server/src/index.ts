@@ -123,7 +123,8 @@ route('POST', /^\/kit\/requests\/(\w+)\/result$/, 'agent', async (b, [rid]) => {
   r.status = b.ok ? 'paid' : 'failed'; r.payTx = b.tx; r.note = b.note;
   const a = agentOf(r.agentId)!;
   cache.delete(`bal:${a.address}`);
-  log(b.ok ? `${a.name} paid ${gram(BigInt(r.amount!))} → ${r.to!.slice(-6)}` : `${a.name} payment failed: ${b.note}`, b.ok ? 'info' : 'warn');
+  const payee = db.contacts.find(c => { try { return Address.parse(c.address).equals(Address.parse(r.to!)); } catch { return false; } });
+  log(b.ok ? `${a.name} paid ${gram(BigInt(r.amount!))} GRAM to ${payee?.name ?? `${r.to!.slice(2, 6)}…${r.to!.slice(-4)}`}` : `${a.name} payment failed: ${b.note}`, b.ok ? 'info' : 'warn');
   save(); return r;
 });
 
