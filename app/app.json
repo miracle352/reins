@@ -10,8 +10,17 @@
     {
       "name": "network",
       "desc": "Talks to your Reins server, which relays agent requests and reads the TON testnet.",
-      "whitelist": ["http://localhost:8787", "http://127.0.0.1:8787"]
+      "whitelist": [
+        "http://localhost:8787",
+        "http://127.0.0.1:8787"
+      ]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Hands-free answers: while a request is on screen, Reins listens for a few seconds for \"approve\", \"reject\" or \"why\". Audio is transcribed on your own Reins server."
     }
   ],
-  "supported_languages": ["en"]
+  "supported_languages": [
+    "en"
+  ]
 }

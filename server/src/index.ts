@@ -6,6 +6,8 @@ import * as chain from './chain.ts';
 import { db, save, log, id, type Agent, type Req } from './store.ts';
 import { evaluate, DEFAULT_LIMITS, gram, toNanoStr } from './policy.ts';
 import { startTelegram } from './telegram.ts';
+import { transcribe, warmVoice } from './voice.ts';
+import { parseIntent } from '../../shared/intent.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const BUFFER = toNanoStr(process.env.REINS_BUFFER ?? '0.3');
@@ -27,6 +29,20 @@ function spentToday(agentId: string) {
     .filter(r => r.agentId === agentId && r.kind === 'pay' && ['approved', 'paid'].includes(r.status) && Date.now() - r.createdAt < DAY)
     .reduce((s, r) => s + BigInt(r.amount!), 0n);
 }
+const today = () => new Date().toISOString().slice(0, 10);
+function limitsFor(a: Agent) {
+  const base = BigInt(a.daily ?? DEFAULT_LIMITS.daily.toString());
+  const boost = a.boost?.day === today() ? BigInt(a.boost.amount) : 0n;
+  // A single payment above 1 GRAM is flagged unless you just gave the agent more than that.
+  return { perPayment: boost > DEFAULT_LIMITS.perPayment ? boost : DEFAULT_LIMITS.perPayment, daily: base + boost };
+}
+function lastPayment(agentId: string) {
+  const r = db.requests.filter(x => x.agentId === agentId && x.kind === 'pay' && x.status === 'paid').sort((x, y) => y.createdAt - x.createdAt)[0];
+  if (!r) return null;
+  const c = db.contacts.find(c => { try { return Address.parse(c.address).equals(Address.parse(r.to!)); } catch { return false; } });
+  return { amount: gram(BigInt(r.amount!)), to: c?.name ?? `${r.to!.slice(2, 6)}…${r.to!.slice(-4)}`, at: r.createdAt };
+}
+
 function cardFor(r: Req) {
   const a = agentOf(r.agentId);
   const contact = r.to ? db.contacts.find(c => { try { return Address.parse(c.address).equals(Address.parse(r.to!)); } catch { return false; } }) : undefined;
@@ -74,7 +90,7 @@ route('POST', /^\/kit\/pay$/, async b => {
   const purpose = String(b.purpose ?? '').slice(0, 140);
   const pendingSpend = db.requests.filter(r => r.agentId === a.id && r.status === 'approved' && r.kind === 'pay').reduce((s, r) => s + BigInt(r.amount!), 0n);
   const bufferLeft = (await agentBal(a)) - pendingSpend - 20_000_000n;
-  const v = evaluate({ to: String(b.to), amount, purpose, contacts: db.contacts, spentToday: spentToday(a.id), limits: DEFAULT_LIMITS, bufferLeft });
+  const v = evaluate({ to: String(b.to), amount, purpose, contacts: db.contacts, spentToday: spentToday(a.id), limits: limitsFor(a), bufferLeft });
   const r: Req = { id: id(), agentId: a.id, kind: 'pay', to: String(b.to), amount: amount.toString(), purpose, flags: v.flags, status: v.auto ? 'approved' : 'pending', auto: v.auto, createdAt: Date.now(), decidedAt: v.auto ? Date.now() : undefined };
   db.requests.push(r);
   log(v.auto
@@ -121,10 +137,18 @@ route('GET', /^\/lens\/state$/, async () => {
   const alarm = alarmAgent ? { ...alarmAgent, alarm: alarmAgent.alarm ?? 'Frozen from Telegram. Its buffer is still in its wallet.' } : undefined;
   return {
     vault: db.vault, vaultBalance: gram(vaultBal), atRisk: gram(atRisk),
-    agents: db.agents.map(a => ({ id: a.id, name: a.name, status: a.frozen && a.status === 'active' ? 'frozen' : a.status })),
+    agents: await Promise.all(db.agents.filter(a => a.status !== 'revoked' || Date.now() - a.createdAt < DAY).map(async a => ({
+      id: a.id, name: a.name, address: a.address,
+      status: a.frozen && a.status === 'active' ? 'frozen' : a.status,
+      balance: a.status === 'active' ? gram(await agentBal(a)) : '0',
+      spentToday: gram(spentToday(a.id)), daily: gram(limitsFor(a).daily),
+      waiting: db.requests.filter(r => r.agentId === a.id && r.status === 'pending').length,
+      last: lastPayment(a.id),
+    }))),
+    spentToday: gram(db.agents.reduce((s, a) => s + spentToday(a.id), 0n)),
     alarm: alarm ? { agentId: alarm.id, agent: alarm.name, text: alarm.alarm, agentAddress: alarm.address } : null,
     pending: pending[0] ? cardFor(pending[0]) : null, pendingCount: pending.length,
-    ticker: db.events.slice(0, 3).map(e => e.text),
+    ticker: db.events.slice(0, 8).map(e => e.text),
     telegram: db.telegramChat ? 'linked' : db.pairCode ?? null,
   };
 });
@@ -163,6 +187,32 @@ route('POST', /^\/lens\/kill$/, async b => {
 route('POST', /^\/lens\/dismiss$/, async b => {
   const a = agentOf(b.agentId); if (a) { a.alarm = undefined; a.frozen = false; log(`Alarm on ${a.name} dismissed`); save(); }
   return { ok: true };
+});
+
+route('POST', /^\/lens\/pause$/, async b => {
+  const a = agentOf(b.agentId); if (!a) throw new HttpError(404, 'unknown agent');
+  a.frozen = !!b.on;
+  if (a.frozen) for (const r of db.requests) if (r.agentId === a.id && r.status === 'pending') { r.status = 'rejected'; r.note = 'agent paused'; }
+  log(a.frozen ? `Paused ${a.name}` : `Resumed ${a.name}`, 'info', { agentId: a.id }); save();
+  return { ok: true };
+});
+
+route('POST', /^\/lens\/give$/, async b => {
+  const a = agentOf(b.agentId); if (!a || a.status !== 'active') throw new HttpError(409, 'That agent is not live.');
+  const amount = toNanoStr(String(b.amount));
+  await chain.sendBoc(String(b.boc));
+  const prev = a.boost?.day === today() ? BigInt(a.boost.amount) : 0n;
+  a.boost = { day: today(), amount: (prev + amount).toString() };
+  cache.delete(`bal:${a.address}`); cache.delete('vault');
+  log(`Gave ${a.name} ${gram(amount)} GRAM (today's budget now ${gram(limitsFor(a).daily)})`, 'info', { agentId: a.id }); save();
+  return { ok: true, daily: gram(limitsFor(a).daily) };
+});
+
+route('POST', /^\/lens\/voice$/, async b => {
+  const text = await transcribe(String(b.pcm ?? ''));
+  const intent = parseIntent(text, db.agents.filter(a => a.status === 'active').map(a => a.name));
+  if (text) log(`Heard: "${text}"`, 'info');
+  return { text, intent };
 });
 
 // --- watchdog: every outgoing transfer must match something you or your rules approved ---
@@ -217,6 +267,8 @@ createServer(async (req: IncomingMessage, res: ServerResponse) => {
   }
   send(404, { error: 'not found' });
 }).listen(PORT, () => console.log(`reins server on :${PORT}`));
+
+void warmVoice().then(() => console.log('voice: ready (local Whisper)')).catch(e => console.error('voice: off', e.message));
 
 startTelegram({
   reject(requestId) {

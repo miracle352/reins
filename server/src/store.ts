@@ -6,6 +6,8 @@ import type { Contact, Flag } from './policy.ts';
 export type Agent = {
   id: string; name: string; operatorPub: string; address: string; index: string;
   status: 'awaiting_create' | 'active' | 'revoked'; createdAt: number; alarm?: string; frozen?: boolean;
+  /** Daily budget in nanoGRAM; `boost` adds to it for one UTC day ("give trip-bot 2 more"). */
+  daily?: string; boost?: { day: string; amount: string };
 };
 export type Req = {
   id: string; agentId: string; kind: 'create' | 'pay';

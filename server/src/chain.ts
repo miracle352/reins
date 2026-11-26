@@ -37,9 +37,11 @@ export async function balance(addr: string): Promise<bigint> {
   return BigInt(j.result ?? 0);
 }
 
+/** Account state from v2 (liteserver). The v3 indexer can lag minutes behind on testnet. */
 export async function state(addr: string): Promise<'active' | 'uninit' | 'nonexist' | 'frozen'> {
-  const j = await get(`/api/v3/addressInformation?address=${addr}&use_v2=false`);
-  return j.status ?? 'nonexist';
+  const j = await get(`/api/v2/getAddressInformation?address=${addr}`);
+  const st = j?.result?.state;
+  return st === 'active' || st === 'frozen' ? st : st === 'uninitialized' ? 'uninit' : 'nonexist';
 }
 
 async function runGet(addr: string, method: string): Promise<bigint> {
