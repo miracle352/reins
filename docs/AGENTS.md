@@ -83,5 +83,5 @@ OPENROUTER_API_KEY=... REINS_LINK=ABCD-2345 REINS_AGENT_NAME=mcp-agent npx tsx d
 ## What we learned running real models against it
 
 - Models do follow instructions hidden in documents. A free model asked to pay a hotel deposit read a hidden comment and asked for 2 GRAM while writing "0.4" in the purpose. Reins compares the two in code.
-- Models are good at saying what they're doing and bad at checking addresses. It paid "the address the invoice said changed this month" without hesitation.
+- Models are good at saying what they're doing and bad at checking addresses. It tried to pay "the address the invoice said changed this month" without hesitation. Reins stopped it as a lookalike.
 - Models take a low balance as a hard limit. Our first version showed the 0.3 GRAM buffer and the model decided it could not ask for more. The tool text now says approved payments are funded by you.
