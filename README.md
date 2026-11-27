@@ -25,7 +25,7 @@ The phone page, in the Even app, shows your vault with a rein running to each ag
 
 ---
 
-## Try it (no glasses needed)
+## Try it (in Even's simulator today, on your G2 next)
 
 - **Phone page in your browser:** https://reins-jhyz.onrender.com/app/
 - **Every glasses screen, in Even's official simulator:** `npx @evenrealities/evenhub-simulator "https://reins-jhyz.onrender.com/glasses/?tour"`
