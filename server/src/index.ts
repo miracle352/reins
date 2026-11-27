@@ -347,7 +347,10 @@ function serveSite(path: string, res: ServerResponse) {
   if (path === '/app') { res.writeHead(301, { location: '/app/' }).end(); return true; }
   const rel = path === '/' ? 'index.html' : path.endsWith('/') ? path.slice(1) + 'index.html' : path.slice(1);
   if (rel.includes('..') || !/^[\w./-]+$/.test(rel)) return false;
-  const file = join(SITE, rel), type = TYPES[extname(file)];
+  // Clean addresses: /try serves try.html, and /try.html redirects to /try.
+  if (rel.endsWith('.html') && rel !== 'index.html' && !rel.includes('/')) { res.writeHead(301, { location: '/' + rel.slice(0, -5) }).end(); return true; }
+  const plain = !extname(rel) && existsSync(join(SITE, rel + '.html'));
+  const file = join(SITE, plain ? rel + '.html' : rel), type = TYPES[extname(file)];
   if (!type || !existsSync(file)) return false;
   res.writeHead(200, { 'content-type': type, 'cache-control': rel.endsWith('index.html') ? 'no-cache' : 'public, max-age=86400' });
   res.end(readFileSync(file)); return true;

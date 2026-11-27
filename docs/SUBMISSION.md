@@ -25,7 +25,7 @@ AI Assistants & Work
 - GitHub: https://github.com/miracle352/reins
 - Demo video: (your YouTube link)
 - Website: https://reins-jhyz.onrender.com
-- Try it: https://reins-jhyz.onrender.com/try.html
+- Try it: https://reins-jhyz.onrender.com/try
 - Telegram bot: https://t.me/reins_m_bot
 
 ## Tags
@@ -65,7 +65,7 @@ No model decides whether money moves. The checks are plain code.
 
 - Phone page in your browser: https://reins-jhyz.onrender.com/app/
 - Every glasses screen, in Even's official simulator: `npx @evenrealities/evenhub-simulator "https://reins-jhyz.onrender.com/glasses/?tour"`
-- The full flow on testnet, and the Even Hub beta for G2 owners: https://reins-jhyz.onrender.com/try.html
+- The full flow on testnet, and the Even Hub beta for G2 owners: https://reins-jhyz.onrender.com/try
 
 ### What we'd ask Even for
 
